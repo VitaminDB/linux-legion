@@ -18,3 +18,8 @@ libc = "0.2"
 
 [profile.dev]
 opt-level = 1
+
+[dev-dependencies]
+syngui = { git = "https://github.com/VitaminDB/syngui.git", branch = "master", default-features = false, features = [
+    "winit", "msdf", "effects", "material-icons", "image", "testing",
+] }

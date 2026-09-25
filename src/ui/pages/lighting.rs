@@ -462,9 +462,12 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                     .child(
                         Button::new("Новый слой")
                             .icon(icons::ADD)
-                            .disabled(sel_empty)
                             .on_click(move || {
-                                let keys = c_add.rgb_sel.get_untracked();
+                                let mut keys = c_add.rgb_sel.get_untracked();
+                                if keys.is_empty() {
+                                    let zones = layout::build(&c_add.sink.rgb.get_untracked().matrix);
+                                    keys = layout::preset(&zones, Preset::All);
+                                }
                                 c_add.edit_rgb(|v| v.push(Effect::new(EffectType::Always, keys)));
                                 let n = c_add.rgb_edit.get_untracked().len();
                                 c_add.rgb_layer.set(Some(n - 1));
@@ -483,6 +486,14 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                             .class("btn-ghost"),
                     ),
             )
+            .child(
+                Text::new(if sel_empty {
+                    "Новый слой ляжет на все зоны. Чтобы покрасить часть клавиш, сначала выделите их на схеме."
+                } else {
+                    "Новый слой ляжет на выделенные зоны."
+                })
+                .class("row-desc"),
+            )
         }),
     )
 }
@@ -494,7 +505,7 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
             return Box::new(card(
                 "Параметры слоя",
                 "",
-                Text::new("Выберите слой слева или создайте новый: выделите зоны на схеме и нажмите «Новый слой».")
+                Text::new("Выберите слой слева или нажмите «Новый слой» — он ляжет на выделенные зоны или, если ничего не выделено, на все.")
                     .class("muted"),
             ));
         };
@@ -799,4 +810,83 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
             )
             .class("save-bar")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spectrum::device::KeyMatrix;
+    use crate::spectrum::sim::{LOGO, MATRIX};
+    use crate::worker::RgbState;
+    use syngui::testing::*;
+
+    const STYLES: &str = include_str!("../../../styles/app.mss");
+
+    fn ctx() -> AppCtx {
+        // Разрешает чтение сигналов в потоке теста.
+        let _ = TestHarness::new(Box::new(DecoratedBox::new()));
+        let ctx = AppCtx::new(true);
+        let matrix = KeyMatrix {
+            width: 22,
+            height: 9,
+            rows: MATRIX.iter().map(|r| r.to_vec()).collect(),
+            extra: vec![LOGO],
+        };
+        ctx.sink.rgb.set(RgbState { link: RgbLink::Ready, profile: 3, brightness: 5, logo: true, matrix, ..Default::default() });
+        ctx.sink.rgb_effects.set(Some((3, vec![])));
+        ctx
+    }
+
+    fn harness(w: Box<dyn Widget>) -> TestHarness {
+        let mut h = TestHarness::new(w);
+        h.apply_mss(STYLES);
+        for _ in 0..3 {
+            h.rebuild();
+            h.apply_mss_dirty(STYLES);
+            h.layout(1300.0, 1400.0);
+        }
+        h
+    }
+
+    #[test]
+    fn click_selects_zone() {
+        let ctx = ctx();
+        let zones: Vec<Zone> = layout::build(&ctx.sink.rgb.get_untracked().matrix)
+            .into_iter()
+            .filter(|z| z.group != Group::Logo)
+            .collect();
+        let w_idx = zones.iter().position(|z| z.code == 0x43).unwrap();
+        let mut h = harness(Box::new(scheme_card(ctx.clone())));
+        let cells = h.find_by_type_name("Positioned");
+        assert_eq!(cells.len(), zones.len(), "каждая зона — Positioned");
+        let b = h.element_bounds(cells[w_idx]);
+        eprintln!("W bounds {b:?}");
+        h.send_events(&click_at(Point::new(b.x() + b.width() / 2.0, b.y() + b.height() / 2.0)));
+        assert_eq!(ctx.rgb_sel.get_untracked(), vec![0x43]);
+    }
+
+    #[test]
+    fn new_layer_button() {
+        let ctx = ctx();
+        let mut h = harness(Box::new(layers_card(ctx.clone())));
+        let btn = h.find_by_class("btn-primary")[0];
+        let b = h.element_bounds(btn);
+        let click = |h: &mut TestHarness| {
+            h.send_events(&click_at(Point::new(b.x() + b.width() / 2.0, b.y() + b.height() / 2.0)))
+        };
+        // Без выделения — слой на все зоны.
+        click(&mut h);
+        let all = ctx.rgb_edit.get_untracked();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].keys.len(), 130, "все зоны вместе с логотипом");
+        // С выделением — только на выделенные.
+        ctx.rgb_sel.set(vec![0x43, 0x58]);
+        h.rebuild();
+        h.layout(1300.0, 1400.0);
+        click(&mut h);
+        let v = ctx.rgb_edit.get_untracked();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[1].keys, vec![0x43, 0x58]);
+        assert_eq!(ctx.rgb_layer.get_untracked(), Some(1));
+    }
 }
