@@ -8,11 +8,17 @@ Written in Rust on [syngui](https://github.com/VitaminDB/syngui). Uses the upstr
 (`lenovo-wmi-gamezone`, `lenovo-wmi-other`, `ideapad-laptop`) and talks to the RGB controller
 directly through `hidraw` — no out-of-tree kernel module, no daemon, no root at runtime.
 
-![Lighting](screenshots/lighting.png)
+<p align="center"><img src="assets/icon/linux-legion-128.png" width="96" alt="icon"></p>
 
-| Home | Performance | Battery |
+![Home](screenshots/home.png)
+
+| Spectrum lighting — live map | Effect layers |
+|---|---|
+| ![Lighting](screenshots/lighting.png) | ![Layers](screenshots/lighting-layers.png) |
+
+| Performance | Battery | Device |
 |---|---|---|
-| ![Home](screenshots/home.png) | ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) |
+| ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
 
 > The interface is in Russian for now.
 
@@ -39,6 +45,16 @@ Other Legion models with the same kernel interfaces and a Spectrum controller (`
 firmware reports. `linux_legion --simulate` shows the whole UI without the hardware.
 
 ## Install
+
+### Arch Linux
+
+```bash
+git clone https://github.com/VitaminDB/linux-legion
+cd linux-legion/packaging/aur/linux-legion
+makepkg -si
+```
+
+The package installs `/usr/bin/linux-legion`, a menu entry, icons and the udev rule.
 
 ### From source
 

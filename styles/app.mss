@@ -64,14 +64,7 @@ Icon { color: var(--text-2); icon-size: 20px; }
     padding: 14px 22px;
 }
 
-.brand-badge {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #7c5cff, #00b4e6);
-    box-shadow: 0 4px 16px rgba(124, 92, 255, 0.35);
-}
-.brand-mark { color: #ffffff; font-size: 24px; font-weight: bold; }
+.brand-icon { width: 46px; height: 46px; }
 .brand-kicker { color: var(--accent-hover); font-size: 11px; font-weight: bold; letter-spacing: 3px; }
 .brand-title { color: var(--text); font-size: 18px; font-weight: bold; }
 

@@ -14,6 +14,8 @@ use std::sync::{Arc, Mutex};
 use syngui::prelude::*;
 use syngui::widgets::GestureDetector;
 
+const BRAND_PNG: &[u8] = include_bytes!("../../assets/icon/linux-legion-128.png");
+
 /// Разделы навигации.
 pub const PAGES: [(&str, &str); 5] = [
     ("Главная", icons::DASHBOARD),
@@ -154,11 +156,7 @@ fn header(ctx: AppCtx) -> impl Widget {
     Row::new()
         .gap(14.0)
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .child(
-            DecoratedBox::new()
-                .child(Center::new().child(Text::new("L").class("brand-mark")))
-                .class("brand-badge"),
-        )
+        .child(Image::from_bytes("brand-icon", BRAND_PNG.to_vec()).fit(ImageFit::Contain).class("brand-icon"))
         .child(
             Column::new()
                 .gap(1.0)
