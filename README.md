@@ -46,12 +46,10 @@ firmware reports. `linux_legion --simulate` shows the whole UI without the hardw
 
 ## Install
 
-### Arch Linux
+### Arch Linux (AUR)
 
 ```bash
-git clone https://github.com/VitaminDB/linux-legion
-cd linux-legion/packaging/aur/linux-legion
-makepkg -si
+yay -S linux-legion        # or paru -S linux-legion
 ```
 
 The package installs `/usr/bin/linux-legion`, a menu entry, icons and the udev rule.
