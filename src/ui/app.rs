@@ -273,7 +273,7 @@ fn footer(ctx: AppCtx) -> impl Widget {
         .child(widgets::reactive_box(move || status_line(&c)))
         .child(DecoratedBox::new().class("grow"))
         .child(move || {
-            let text = if ctx.simulate { "демо-режим · данные имитированы" } else { "linux-legion 0.1" };
+            let text = if ctx.simulate { "демо-режим · данные имитированы" } else { concat!("linux-legion ", env!("CARGO_PKG_VERSION")) };
             Text::new(text).class("footer-note")
         })
         .class("footer")
