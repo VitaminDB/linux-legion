@@ -1,0 +1,5 @@
+/target
+# makepkg
+/packaging/**/src/
+/packaging/**/pkg/
+*.pkg.tar.zst

@@ -1,0 +1,20 @@
+# linux-legion: доступ к управлению ноутбуком Lenovo Legion без root.
+#
+# HID-контроллеры подсветки Spectrum (ITE) — пользователю активной сессии.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="c[19]??", TAG+="uaccess"
+
+# Настройки в sysfs — группе wheel (права выставляются при загрузке драйверов).
+ACTION=="remove", GOTO="linux_legion_end"
+
+# Режим питания (Fn+Q).
+SUBSYSTEM=="platform-profile", RUN+="/bin/sh -c 'chgrp wheel /sys%p/profile && chmod g+w /sys%p/profile'"
+# Лимиты мощности CPU (PL1/PL2 и др.).
+SUBSYSTEM=="firmware-attributes", KERNEL=="lenovo-wmi-other-*", RUN+="/bin/sh -c 'for f in /sys%p/attributes/*/current_value; do chgrp wheel $f && chmod g+w $f; done'"
+# Целевые обороты вентиляторов.
+SUBSYSTEM=="hwmon", ATTR{name}=="lenovo_wmi_other", RUN+="/bin/sh -c 'for f in /sys%p/fan*_target; do chgrp wheel $f && chmod g+w $f; done'"
+# Fn Lock, камера, USB-зарядка, режим сохранения батареи.
+SUBSYSTEM=="platform", DRIVER=="ideapad_acpi", RUN+="/bin/sh -c 'cd /sys%p && for f in conservation_mode fn_lock camera_power usb_charging; do [ -e $f ] && chgrp wheel $f && chmod g+w $f; done; true'"
+# Режим заряда батареи (Fast / Standard / Long_Life) и пороги.
+SUBSYSTEM=="power_supply", KERNEL=="BAT[0-9]", RUN+="/bin/sh -c 'cd /sys%p && for f in charge_types charge_control_start_threshold charge_control_end_threshold; do [ -e $f ] && chgrp wheel $f && chmod g+w $f; done; true'"
+
+LABEL="linux_legion_end"

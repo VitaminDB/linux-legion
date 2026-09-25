@@ -1,0 +1,20 @@
+[package]
+name = "linux_legion"
+version = "0.1.0"
+edition = "2021"
+description = "Linux control center for Lenovo Legion laptops: power modes, fans, Spectrum RGB, battery"
+license = "MIT"
+repository = "https://github.com/VitaminDB/linux-legion"
+
+[[bin]]
+name = "linux_legion"
+path = "src/main.rs"
+
+[dependencies]
+syngui = { git = "https://github.com/VitaminDB/syngui.git", branch = "master", default-features = false, features = [
+    "winit", "msdf", "effects", "material-icons", "image",
+] }
+libc = "0.2"
+
+[profile.dev]
+opt-level = 1

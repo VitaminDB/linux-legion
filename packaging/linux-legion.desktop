@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Legion Control
+Name[ru]=Центр управления Legion
+GenericName=Laptop Control Center
+GenericName[ru]=Управление ноутбуком Legion
+Comment=Power modes, fans, Spectrum RGB lighting and battery for Lenovo Legion laptops
+Comment[ru]=Режимы питания, вентиляторы, подсветка Spectrum и батарея ноутбуков Lenovo Legion
+Exec=linux-legion
+Icon=linux-legion
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=legion;lenovo;vantage;rgb;fan;power;battery;подсветка;вентилятор;батарея;
+StartupWMClass=linux-legion
