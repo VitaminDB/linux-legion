@@ -869,9 +869,10 @@ mod tests {
     fn new_layer_button() {
         let ctx = ctx();
         let mut h = harness(Box::new(layers_card(ctx.clone())));
-        let btn = h.find_by_class("btn-primary")[0];
-        let b = h.element_bounds(btn);
+        // Кнопка сдвигается, когда в списке прибавляются слои, — координаты
+        // берутся заново перед каждым щелчком.
         let click = |h: &mut TestHarness| {
+            let b = h.element_bounds(h.find_by_class("btn-primary")[0]);
             h.send_events(&click_at(Point::new(b.x() + b.width() / 2.0, b.y() + b.height() / 2.0)))
         };
         // Без выделения — слой на все зоны.
