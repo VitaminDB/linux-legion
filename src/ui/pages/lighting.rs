@@ -376,6 +376,17 @@ fn layer_subtitle(e: &Effect) -> String {
     }
 }
 
+/// Почему слой пропадёт при записи.
+fn hidden_reason(effects: &[Effect], i: usize) -> String {
+    if let Some(top) = effects[i + 1..].iter().find(|e| e.kind.is_all_zones()) {
+        return format!("Не запишется: «{}» выше занимает все зоны", top.kind.label());
+    }
+    if effects[i].kind.is_whole_keyboard() {
+        return "Не запишется: реагирует на нажатия и не допускает перекрытия сверху".into();
+    }
+    "Не запишется: все зоны закрыты слоями выше".into()
+}
+
 fn layers_card(ctx: AppCtx) -> impl Widget {
     let c_head = ctx.clone();
     card_with(
@@ -390,6 +401,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
             let cur = ctx.rgb_layer.get();
             let sel_empty = ctx.rgb_sel.get().is_empty();
             let n = effects.len();
+            let alive = proto::survivors(&effects);
             let mut col = Column::new().gap(8.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             if effects.is_empty() {
                 col = col.child(Text::new("В профиле нет эффектов — подсветка погашена.").class("muted"));
@@ -421,7 +433,19 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                                             Column::new()
                                                 .gap(3.0)
                                                 .child(Text::new(format!("{}. {}", i + 1, e.kind.label())).class("row-title"))
-                                                .child(Text::new(layer_subtitle(e)).class("row-desc"))
+                                                .child(match &alive[i] {
+                                                    Some(_) if e.kind.is_all_zones() => {
+                                                        Text::new(layer_subtitle(e)).class("row-desc")
+                                                    }
+                                                    Some(k) if k.len() < e.keys.len() => Text::new(format!(
+                                                        "{} · видно {} — остальные закрыты слоями выше",
+                                                        layer_subtitle(e),
+                                                        k.len()
+                                                    ))
+                                                    .class("row-desc"),
+                                                    Some(_) => Text::new(layer_subtitle(e)).class("row-desc"),
+                                                    None => Text::new(hidden_reason(&effects, i)).class("row-warn"),
+                                                })
                                                 .class("grow"),
                                         )
                                         .child(dots)
@@ -451,7 +475,12 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                                             c_del.rgb_layer.set(left.checked_sub(1).map(|m| i.min(m)));
                                         })),
                                 )
-                                .class(if on { "layer-row layer-row-on" } else { "layer-row" }),
+                                .class(match (on, alive[i].is_some()) {
+                                    (true, true) => "layer-row layer-row-on",
+                                    (true, false) => "layer-row layer-row-on layer-row-hidden",
+                                    (false, true) => "layer-row",
+                                    (false, false) => "layer-row layer-row-hidden",
+                                }),
                         ),
                 );
             }
@@ -488,7 +517,8 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
             )
             .child(
                 Text::new(if sel_empty {
-                    "Новый слой ляжет на все зоны. Чтобы покрасить часть клавиш, сначала выделите их на схеме."
+                    "Ничего не выделено — новый слой ляжет на все зоны и закроет слои ниже. \
+                     Чтобы покрасить часть клавиш, сначала выделите их на схеме."
                 } else {
                     "Новый слой ляжет на выделенные зоны."
                 })
@@ -748,6 +778,7 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
         let profile = ctx.sink.rgb.get().profile;
         let effects = ctx.rgb_edit.get();
         let size_err = proto::encode_effects(profile, &proto::compress(&effects)).err();
+        let hidden = proto::survivors(&effects).iter().filter(|k| k.is_none()).count();
         let (c_undo, c_reset, c_save) = (ctx.clone(), ctx.clone(), ctx.clone());
         let status: Box<dyn Widget> = match (&size_err, dirty) {
             (Some(e), _) => Box::new(
@@ -756,6 +787,18 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .child(Icon::new(icons::WARNING).class("status-icon tone-bad"))
                     .child(Text::new(e.to_string()).class("status-text")),
+            ),
+            (None, true) if hidden > 0 => Box::new(
+                Row::new()
+                    .gap(8.0)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .child(Icon::new(icons::WARNING).class("status-icon tone-warn"))
+                    .child(
+                        Text::new(format!(
+                            "Слоёв, полностью закрытых верхними: {hidden} — при записи они пропадут"
+                        ))
+                        .class("status-text"),
+                    ),
             ),
             (None, true) => Box::new(
                 Row::new()

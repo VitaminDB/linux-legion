@@ -335,6 +335,9 @@ Icon { color: var(--text-2); icon-size: 20px; }
     &:hover { border-color: var(--border-strong); }
 }
 .layer-row-on { background: var(--accent-soft); border-color: var(--accent); &:hover { border-color: var(--accent-hover); } }
+.layer-row-hidden { border-color: rgba(251, 191, 36, 0.55); opacity: 0.75; }
+.row-warn { color: var(--warn); font-size: 12px; }
+.tone-warn { color: var(--warn); }
 .layer-icon { icon-size: 22px; color: var(--accent-hover); }
 .mini-dot { width: 12px; height: 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); }
 .mini-rainbow { background: conic-gradient(from 0deg at center, #ff0040, #ffd000, #30ff60, #00d0ff, #7c5cff, #ff0040); }

@@ -356,26 +356,36 @@ impl fmt::Display for EncodeError {
     }
 }
 
-/// Убирает перекрытия слоёв так же, как Vantage: поздний слой побеждает.
-/// Слой «на все зоны» отменяет остальные.
-pub fn compress(effects: &[Effect]) -> Vec<Effect> {
-    if let Some(last) = effects.iter().rev().find(|e| e.kind.is_all_zones()) {
-        return vec![last.clone()];
+/// Что останется от каждого слоя после записи: зоны, которые он реально
+/// красит (`None` — слой отброшен целиком). Каждая зона достаётся верхнему
+/// (последнему) слою; слой «на все зоны» отменяет остальные; слой, реагирующий
+/// на нажатия, нельзя перекрыть частично — он отбрасывается.
+pub fn survivors(effects: &[Effect]) -> Vec<Option<Vec<u16>>> {
+    let mut out = vec![None; effects.len()];
+    if let Some(top) = effects.iter().rposition(|e| e.kind.is_all_zones()) {
+        out[top] = Some(Vec::new());
+        return out;
     }
     let mut used = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for e in effects.iter().rev() {
+    for (i, e) in effects.iter().enumerate().rev() {
         if e.kind.is_whole_keyboard() && e.keys.iter().any(|k| used.contains(k)) {
             continue;
         }
         let keys: Vec<u16> = e.keys.iter().copied().filter(|k| used.insert(*k)).collect();
-        if keys.is_empty() {
-            continue;
+        if !keys.is_empty() {
+            out[i] = Some(keys);
         }
-        out.push(Effect { keys, ..e.clone() });
     }
-    out.reverse();
     out
+}
+
+/// Убирает перекрытия слоёв так же, как Vantage (см. [`survivors`]).
+pub fn compress(effects: &[Effect]) -> Vec<Effect> {
+    effects
+        .iter()
+        .zip(survivors(effects))
+        .filter_map(|(e, keys)| keys.map(|keys| Effect { keys, ..e.clone() }))
+        .collect()
 }
 
 /// Пакет `0xCB`: записать слои в профиль `profile` (1…6).
@@ -609,6 +619,24 @@ mod tests {
         // слой, полностью перекрытый сверху, исчезает
         let hidden = Effect::new(EffectType::Rain, vec![5]);
         assert_eq!(compress(&[hidden, top.clone()]), vec![top]);
+    }
+
+    #[test]
+    fn survivors_report_hidden_layers() {
+        let all: Vec<u16> = (1..=10).collect();
+        let a = Effect::new(EffectType::RainbowWave, all.clone());
+        let b = Effect::new(EffectType::Always, all.clone());
+        let c = Effect::new(EffectType::Always, vec![3]);
+        // второй слой на те же зоны целиком прячет первый
+        assert_eq!(survivors(&[a.clone(), b.clone()]), vec![None, Some(all.clone())]);
+        // третий откусывает зону у второго
+        let s = survivors(&[a, b, c]);
+        assert_eq!(s[0], None);
+        assert_eq!(s[1].as_ref().unwrap().len(), 9);
+        assert_eq!(s[2], Some(vec![3]));
+        // «рябь» нельзя перекрыть частично
+        let r = Effect::new(EffectType::Ripple, all);
+        assert_eq!(survivors(&[r, Effect::new(EffectType::Always, vec![1])])[0], None);
     }
 
     #[test]
