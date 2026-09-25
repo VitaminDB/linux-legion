@@ -2,6 +2,7 @@
 //! подсветки и выполняет команды UI. Результаты уходят в сигналы
 //! (`set()` потокобезопасен); читать сигналы отсюда нельзя.
 
+use crate::autoapply::{self, Saved, ServiceState};
 use crate::hw::battery::{self, Battery, ChargeType};
 use crate::hw::device::{self, SystemInfo, Toggle, Toggles};
 use crate::hw::fans::{self, Fan};
@@ -43,6 +44,8 @@ pub enum Job {
     RgbLoad(u8),
     RgbWrite(u8, Vec<Effect>),
     RgbReset(u8),
+    /// Включить/выключить службу автоприменения.
+    SetAutoApply(bool),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -95,6 +98,8 @@ pub struct Sink {
     pub rgb_effects: RwSignal<Option<(u8, Vec<Effect>)>>,
     pub busy: RwSignal<bool>,
     pub notice: RwSignal<Option<Notice>>,
+    /// Служба автоприменения и сохранённые значения режима «Свой».
+    pub autoapply: RwSignal<(ServiceState, Saved)>,
 }
 
 pub fn spawn(sink: Sink, simulate: bool, page: Arc<AtomicU8>, rx: Receiver<Job>) {
@@ -134,6 +139,7 @@ impl Worker {
     fn run(&mut self, rx: Receiver<Job>) {
         self.sink.info.set(device::read_info());
         self.refresh_sysfs();
+        self.refresh_autoapply();
         let mut next_sysfs = Instant::now();
         let mut next_gpu = Instant::now();
         let mut next_status = Instant::now();
@@ -193,6 +199,11 @@ impl Worker {
         self.sink.toggles.set(device::read_toggles());
     }
 
+    fn refresh_autoapply(&mut self) {
+        let service = if self.simulate { ServiceState::default() } else { autoapply::service_state() };
+        self.sink.autoapply.set((service, autoapply::load()));
+    }
+
     fn sysfs_result(&mut self, r: sysfs::Result<()>, ok: String) {
         match r {
             Ok(()) => self.notify(NoticeKind::Success, ok),
@@ -213,10 +224,18 @@ impl Worker {
             Job::SetTunable(name, v) => {
                 let label = self.label_of(&name);
                 let r = power::set_tunable(&name, v);
+                if r.is_ok() {
+                    autoapply::remember_tunable(&name, v);
+                    self.refresh_autoapply();
+                }
                 self.sysfs_result(r, format!("{label}: {v}"));
             }
             Job::SetFanTarget(i, rpm) => {
                 let r = fans::set_target(i, rpm);
+                if r.is_ok() {
+                    autoapply::remember_fan(i, rpm);
+                    self.refresh_autoapply();
+                }
                 let text = if rpm == 0 { "авто".to_string() } else { format!("{rpm} об/мин") };
                 self.sysfs_result(r, format!("Вентилятор {i}: {text}"));
             }
@@ -241,6 +260,14 @@ impl Worker {
                 self.sink.busy.set(true);
                 self.rgb_cmd(|kb| kb.set_effects(n, &effects), format!("Эффекты записаны в профиль {n}"), Some(n));
                 self.sink.busy.set(false);
+            }
+            Job::SetAutoApply(on) => {
+                match autoapply::set_service(on) {
+                    Ok(()) if on => self.notify(NoticeKind::Success, "Автоприменение включено"),
+                    Ok(()) => self.notify(NoticeKind::Success, "Автоприменение выключено"),
+                    Err(e) => self.notify(NoticeKind::Error, format!("Служба автоприменения: {e}")),
+                }
+                self.refresh_autoapply();
             }
             Job::RgbReset(n) => {
                 self.rgb_cmd(|kb| kb.reset_profile(n), format!("Профиль {n} сброшен к заводскому"), Some(n))

@@ -4,7 +4,7 @@ use super::home::mode_icon;
 use crate::hw::power::PowerMode;
 use crate::ui::app::AppCtx;
 use crate::ui::icons;
-use crate::ui::widgets::{access_banner, bar, card, card_with, labeled, page_header, reactive, reactive_box};
+use crate::ui::widgets::{access_banner, bar, card, card_with, labeled, page_header, reactive, reactive_box, setting_row};
 use crate::worker::Job;
 use syngui::prelude::*;
 use syngui::widgets::*;
@@ -30,7 +30,8 @@ pub fn view(ctx: AppCtx) -> impl Widget {
         .child(card("Режим питания", "", modes(ctx.clone())))
         .child(custom_notice(ctx.clone()))
         .child(tunables(ctx.clone()))
-        .child(fans(ctx))
+        .child(fans(ctx.clone()))
+        .child(autoapply(ctx))
         .class("page")
 }
 
@@ -304,6 +305,76 @@ fn fans(ctx: AppCtx) -> impl Widget {
                                 .child(Text::new(format!("{} об/мин", f.max)).class("scale-label")),
                         ),
                 );
+            }
+            Box::new(col)
+        }),
+    )
+}
+
+/// Автоприменение значений «Своего» режима после перезагрузки и сна.
+fn autoapply(ctx: AppCtx) -> impl Widget {
+    card_with(
+        icons::RESTART,
+        "Автоприменение",
+        || Text::new("").class("card-hint"),
+        reactive_box(move || {
+            let (svc, saved) = ctx.sink.autoapply.get();
+            let tunables = ctx.sink.tunables.get();
+            let fans = ctx.sink.fans.get();
+            let mut col = Column::new().gap(16.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+            let c = ctx.clone();
+            let desc = if !svc.installed {
+                "Служба ставится вместе с пакетом. При сборке из исходников скопируйте \
+                 packaging/linux-legion-autoapply.service в ~/.config/systemd/user/."
+            } else if svc.enabled && svc.active {
+                "Служба работает: значения ниже восстанавливаются при входе в систему, \
+                 при переключении в «Свой» и после выхода из сна."
+            } else if svc.enabled {
+                "Служба включена, но сейчас не запущена — проверьте journalctl --user -u linux-legion-autoapply."
+            } else {
+                "Прошивка забывает лимиты и обороты после перезагрузки, а обороты — и после сна. \
+                 Служба будет восстанавливать их сама."
+            };
+            col = col.child(setting_row(
+                "Применять после перезагрузки",
+                desc,
+                Box::new(
+                    Toggle::new()
+                        .on(svc.enabled)
+                        .on_change(move |v| c.send(Job::SetAutoApply(v)))
+                        .class(if svc.installed { "" } else { "toggle-off" }),
+                ),
+            ));
+
+            let mut items: Vec<String> = saved
+                .tunables
+                .iter()
+                .map(|(name, v)| {
+                    let t = tunables.iter().find(|t| &t.name == name);
+                    let label = t.map_or(name.clone(), |t| t.label.clone());
+                    format!("{label}: {v} {}", t.map_or("", |t| t.unit))
+                })
+                .collect();
+            items.extend(saved.fans.iter().map(|(i, rpm)| {
+                let label = fans.iter().find(|f| f.index == *i).map_or("Вентилятор", |f| f.label);
+                let v = if *rpm == 0 { "авто".to_string() } else { format!("{rpm} об/мин") };
+                format!("Вентилятор «{label}»: {v}")
+            }));
+            if items.is_empty() {
+                col = col.child(
+                    Text::new(
+                        "Пока ничего не сохранено: значения запоминаются кнопками «Применить» в режиме «Свой».",
+                    )
+                    .class("muted"),
+                );
+            } else {
+                let mut list = Column::new().gap(2.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+                for it in items {
+                    let (k, v) = it.rsplit_once(": ").unwrap_or((it.as_str(), ""));
+                    list = list.child(crate::ui::widgets::kv(k, v.to_string()));
+                }
+                col = col.child(Text::new("Сохранённые значения").class("field-label")).child(list);
             }
             Box::new(col)
         }),

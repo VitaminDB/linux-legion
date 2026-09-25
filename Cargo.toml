@@ -1,6 +1,6 @@
 [package]
 name = "linux_legion"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Linux control center for Lenovo Legion laptops: power modes, fans, Spectrum RGB, battery"
 license = "MIT"

@@ -1,0 +1,13 @@
+[Unit]
+Description=linux-legion: restore Custom mode power limits and fan speeds
+Documentation=https://github.com/VitaminDB/linux-legion
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/linux-legion --daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

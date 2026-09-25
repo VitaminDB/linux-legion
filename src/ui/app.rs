@@ -62,6 +62,7 @@ impl AppCtx {
                 rgb_effects: use_signal(None),
                 busy: use_signal(false),
                 notice: use_signal(None),
+                autoapply: use_signal(Default::default()),
             },
             page: use_signal(0usize),
             tun_edit: use_signal(BTreeMap::new()),

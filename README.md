@@ -28,6 +28,9 @@ directly through `hidraw` — no out-of-tree kernel module, no daemon, no root a
   The NVIDIA GPU is polled only while it is already awake, so the dashboard never wakes the dGPU.
 - **Performance** — Quiet / Balanced / Performance / Extreme / Custom (the same as Fn+Q).
   In *Custom*: CPU PL1/PL2 and every other limit the firmware exposes, and manual fan targets.
+  **Auto-apply**: the firmware forgets these after a reboot (fan targets also after sleep), so an
+  optional user service restores the saved values at login, whenever Custom mode is switched on
+  (Fn+Q) and after resume.
 - **Lighting (Spectrum)** — six hardware profiles (Fn+Space), brightness, the LEGION lid logo,
   and a layer editor: select keys and case zones on a live map (colours are read back from the
   controller ~10 times a second) and assign any of 12 effects with speed, direction and colours.
@@ -73,9 +76,23 @@ sysfs knobs (power mode, power limits, fan targets, battery mode, Fn Lock…) wr
 
 ```bash
 linux_legion                 # control the laptop
+linux_legion --apply         # apply saved Custom-mode limits and fans once
+linux_legion --daemon        # the auto-apply service (linux-legion-autoapply.service)
 linux_legion --simulate      # demo mode with a simulated Legion Pro 7
 linux_legion --page 2        # open a page (0 home … 4 device)
 LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
+```
+
+## Auto-apply
+
+Values applied with the *Apply* buttons in Custom mode are saved to
+`~/.config/linux-legion/custom.conf`. The toggle on the Performance page runs
+`systemctl --user enable --now linux-legion-autoapply.service`; the service (installed by the
+package) writes only the values that differ from the current ones, and only in Custom mode.
+
+```text
+tunable.ppt_pl1_spl=95
+fan.1=3000        # 0 = automatic
 ```
 
 ## Kernel interfaces
@@ -121,7 +138,8 @@ src/hw/         sysfs: power modes and limits, fans, battery, switches, sensors,
 src/spectrum/   RGB protocol, hidraw transport, simulator, physical keyboard layout
 src/worker.rs   background thread: polling and hardware commands
 src/ui/         the window: home, performance, lighting, battery, device pages
-packaging/      udev rule, .desktop entry, PKGBUILD
+src/autoapply.rs  saved Custom-mode values and the auto-apply service
+packaging/      udev rule, systemd user unit, .desktop entry, PKGBUILD
 ```
 
 `cargo test` runs the unit tests (including packets captured from a live keyboard).
