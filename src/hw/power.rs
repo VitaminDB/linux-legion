@@ -61,6 +61,43 @@ impl PowerMode {
         }
     }
 
+    /// Лимиты CPU (PL1/PL2, Вт), которые Lenovo закладывает в режим — те же,
+    /// что Legion Space/DPTF применяют в Windows (capdata01 Legion Pro 7 Gen 10).
+    /// Для «Свой» лимиты берутся из атрибутов прошивки (`read_tunables`).
+    pub fn cpu_limits(self) -> Option<(u32, u32)> {
+        Some(match self {
+            PowerMode::Quiet => (55, 65),
+            PowerMode::Balanced => (90, 125),
+            PowerMode::Performance => (145, 190),
+            PowerMode::Extreme => (160, 205),
+            PowerMode::Custom => return None,
+        })
+    }
+
+    /// EPP (energy_performance_preference) под режим.
+    pub fn epp(self) -> &'static str {
+        match self {
+            PowerMode::Quiet => "balance_power",
+            PowerMode::Balanced => "balance_performance",
+            PowerMode::Performance | PowerMode::Extreme | PowerMode::Custom => "performance",
+        }
+    }
+
+    /// Ключ в custom.conf.
+    pub fn key(self) -> &'static str {
+        match self {
+            PowerMode::Quiet => "quiet",
+            PowerMode::Balanced => "balanced",
+            PowerMode::Performance => "performance",
+            PowerMode::Extreme => "extreme",
+            PowerMode::Custom => "custom",
+        }
+    }
+
+    pub fn from_key(s: &str) -> Option<Self> {
+        PowerMode::ALL.iter().copied().find(|m| m.key() == s)
+    }
+
     /// Цвет индикатора на кнопке питания, как в Legion.
     pub fn tone(self) -> &'static str {
         match self {

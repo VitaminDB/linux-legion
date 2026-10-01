@@ -47,6 +47,22 @@ pub fn install() -> PathBuf {
         put(&root, &format!("{hw}/fan{i}_max"), &max.to_string());
         put(&root, &format!("{hw}/fan{i}_div"), "100");
     }
+    // RAPL: как после загрузки BIOS — MMIO 30/30 Вт, пока служба не выставит режим.
+    for (zone, pl1, pl2) in [("intel-rapl:0", 165, 210), ("intel-rapl-mmio:0", 30, 30)] {
+        let z = format!("/sys/class/powercap/{zone}");
+        put(&root, &format!("{z}/name"), "package-0");
+        put(&root, &format!("{z}/constraint_0_power_limit_uw"), &(pl1 * 1_000_000).to_string());
+        put(&root, &format!("{z}/constraint_1_power_limit_uw"), &(pl2 * 1_000_000).to_string());
+    }
+    for i in 0..4 {
+        let pol = format!("/sys/devices/system/cpu/cpufreq/policy{i}");
+        put(&root, &format!("{pol}/energy_performance_preference"), "balance_power");
+        put(
+            &root,
+            &format!("{pol}/energy_performance_available_preferences"),
+            "default performance balance_performance balance_power power",
+        );
+    }
     let ct = "/sys/class/hwmon/hwmon7";
     put(&root, &format!("{ct}/name"), "coretemp");
     put(&root, &format!("{ct}/temp1_label"), "Package id 0");

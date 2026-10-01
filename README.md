@@ -8,7 +8,8 @@ modes and hardware switches.
 
 Written in Rust on [syngui](https://github.com/VitaminDB/syngui). Uses the upstream kernel drivers
 (`lenovo-wmi-gamezone`, `lenovo-wmi-other`, `ideapad-laptop`) and talks to the RGB controller
-directly through `hidraw` — no out-of-tree kernel module, no daemon, no root at runtime.
+directly through `hidraw` — no out-of-tree kernel module, no root at runtime (a small user
+service keeps the CPU power limits and fans in line with the selected mode).
 
 <p align="center"><img src="assets/icon/linux-legion-128.png" width="96" alt="icon"></p>
 
@@ -29,10 +30,19 @@ directly through `hidraw` — no out-of-tree kernel module, no daemon, no root a
 - **Home** — power mode in one click, live CPU / GPU / memory / battery gauges and fan speeds.
   The NVIDIA GPU is polled only while it is already awake, so the dashboard never wakes the dGPU.
 - **Performance** — Quiet / Balanced / Performance / Extreme / Custom (the same as Fn+Q).
-  In *Custom*: CPU PL1/PL2 and every other limit the firmware exposes, and manual fan targets.
-  **Auto-apply**: the firmware forgets these after a reboot (fan targets also after sleep), so an
-  optional user service restores the saved values at login, whenever Custom mode is switched on
-  (Fn+Q) and after resume.
+  In *Custom*: CPU PL1/PL2 and every other limit the firmware exposes (with a *Maximum* preset),
+  and manual fan targets.
+  **CPU limits per mode (RAPL)**: on the Legion Pro 7 Gen 10 the BIOS writes 30/30 W into RAPL
+  MMIO at boot and never touches it again — on Windows Legion Space applies the per-mode limits,
+  on Linux nobody does, so the CPU is stuck at 30 W in every mode. The service writes Lenovo's own
+  values (Quiet 55/65, Balanced 90/125, Performance 145/190, Extreme 160/205 W, Custom = the
+  firmware limits you set) into both RAPL interfaces and keeps them there.
+  **EPP per mode** (optional): `performance` in Performance/Extreme/Custom, `balance_performance`
+  in Balanced, `balance_power` in Quiet — overrides tuned / power-profiles-daemon.
+  **Software fan curve**: see [Fans](#fans) below.
+  **Auto-apply**: the firmware forgets the Custom values after a reboot (fan targets also after
+  sleep); the service restores them at login, whenever Custom mode is switched on (Fn+Q) and after
+  resume.
 - **Lighting (Spectrum)** — six hardware profiles (Fn+Space), brightness, the LEGION lid logo,
   and a layer editor: select keys and case zones on a live map (colours are read back from the
   controller ~10 times a second) and assign any of 12 effects with speed, direction and colours.
@@ -71,8 +81,8 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 The udev rule gives the logged-in user access to the RGB controller (`uaccess`) and makes the
-sysfs knobs (power mode, power limits, fan targets, battery mode, Fn Lock…) writable for the
-`wheel` group.
+sysfs knobs (power mode, power limits, fan targets, RAPL, EPP, battery mode, Fn Lock…) writable
+for the `wheel` group.
 
 ## Usage
 
@@ -85,17 +95,39 @@ linux_legion --page 2        # open a page (0 home … 4 device)
 LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
 ```
 
-## Auto-apply
+## The service
 
-Values applied with the *Apply* buttons in Custom mode are saved to
-`~/.config/linux-legion/custom.conf`. The toggle on the Performance page runs
-`systemctl --user enable --now linux-legion-autoapply.service`; the service (installed by the
-package) writes only the values that differ from the current ones, and only in Custom mode.
+Everything the service does is configured in `~/.config/linux-legion/custom.conf` (the toggles
+on the Performance page edit it); the toggle *Service* runs
+`systemctl --user enable --now linux-legion-autoapply.service`.
 
 ```text
-tunable.ppt_pl1_spl=95
-fan.1=3000        # 0 = automatic
+tunable.ppt_pl1_spl=95       # Custom mode: firmware limits, applied with "Apply"
+fan.1=3000                   # Custom mode: fan target, 0 = automatic
+fan.curve=1                  # software fan curve (see Fans)
+cpu.rapl=1                   # per-mode CPU limits in RAPL (default on)
+cpu.epp=0                    # per-mode EPP (default off)
+rapl.performance=150/190     # your own PL1/PL2 for a mode (quiet, balanced, performance, extreme)
 ```
+
+`linux_legion --apply` applies everything once; `--daemon` is what the unit runs. The service
+re-checks the limits every 5 s (writes only when something differs), the fans every 2 s.
+
+## Fans
+
+The kernel's `fanN_target` (0 = auto) talks to the EC command that Legion Space uses for its
+per-fan RPM sliders. On the Legion Pro 7 Gen 10 EC (83F5 / Q7CN) that command is **one-way**: once
+a manual RPM has been written, the EC never goes back to its own curve — not after writing 0
+(that stops the fan until the thermal floor kicks in), not after a mode switch, the fan table,
+the full-speed flag, suspend or a warm reboot. Only an EC reset helps: shut down, unplug the
+charger, hold the power button for 30 s (or the pin-hole reset), boot.
+
+So *Software fan curve* exists: when it is on, the service drives all fans by CPU / GPU
+temperature (fan 1 — CPU, fan 2 — GPU, fan 4 — the hotter of the two) with a curve scaled by the
+mode (Quiet ×0.7 … Extreme ×1.35); in Custom mode the targets you set are kept as they are, except
+above 95 °C where they are raised to the curve. Speeds rise immediately and fall only after three
+consecutive lower readings, so they do not hunt. It turns on automatically the first time you
+apply a manual fan target.
 
 ## Kernel interfaces
 
@@ -103,7 +135,9 @@ fan.1=3000        # 0 = automatic
 |---|---|
 | Power mode | `/sys/class/platform-profile/*/profile` (`lenovo-wmi-gamezone`) |
 | Power limits | `/sys/class/firmware-attributes/lenovo-wmi-other-0/attributes/*/current_value` — accepted only in *custom* mode, otherwise `EBUSY` |
-| Fans | hwmon `lenovo_wmi_other`: `fanN_input`, `fanN_target` (0 = auto; *custom* mode only) |
+| Fans | hwmon `lenovo_wmi_other`: `fanN_input`, `fanN_target` (0 = auto on paper; see [Fans](#fans)) |
+| CPU limits | powercap `intel-rapl:0` and `intel-rapl-mmio:0`, `constraint_{0,1}_power_limit_uw` |
+| EPP | cpufreq `policy*/energy_performance_preference` |
 | Battery mode | `/sys/class/power_supply/BAT0/charge_types` (`Fast` / `Standard` / `Long_Life`) |
 | Switches | `ideapad_acpi`: `fn_lock`, `camera_power`, `usb_charging` |
 
@@ -140,7 +174,7 @@ src/hw/         sysfs: power modes and limits, fans, battery, switches, sensors,
 src/spectrum/   RGB protocol, hidraw transport, simulator, physical keyboard layout
 src/worker.rs   background thread: polling and hardware commands
 src/ui/         the window: home, performance, lighting, battery, device pages
-src/autoapply.rs  saved Custom-mode values and the auto-apply service
+src/autoapply.rs  the service: Custom-mode auto-apply, per-mode RAPL/EPP, software fan curve
 packaging/      udev rule, systemd user unit, .desktop entry, PKGBUILD
 ```
 

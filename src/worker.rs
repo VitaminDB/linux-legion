@@ -2,11 +2,13 @@
 //! подсветки и выполняет команды UI. Результаты уходят в сигналы
 //! (`set()` потокобезопасен); читать сигналы отсюда нельзя.
 
-use crate::autoapply::{self, Saved, ServiceState};
+use crate::autoapply::{self, Flag, Saved, ServiceState};
 use crate::hw::battery::{self, Battery, ChargeType};
+use crate::hw::cpufreq::{self, Epp};
 use crate::hw::device::{self, SystemInfo, Toggle, Toggles};
 use crate::hw::fans::{self, Fan};
 use crate::hw::power::{self, PowerMode, PowerState, Tunable};
+use crate::hw::rapl::{self, Rapl};
 use crate::hw::sensors::{Gpu, Sampler, Sensors};
 use crate::hw::sysfs;
 use crate::spectrum::device::{Error as KbError, KeyMatrix, Keyboard};
@@ -46,6 +48,15 @@ pub enum Job {
     RgbReset(u8),
     /// Включить/выключить службу автоприменения.
     SetAutoApply(bool),
+    /// Переключатель службы (кривая вентиляторов, RAPL, EPP).
+    SetFlag(Flag, bool),
+}
+
+/// Лимиты CPU (RAPL) и EPP — то, чем управляет служба по режиму.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct CpuState {
+    pub rapl: Rapl,
+    pub epp: Epp,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -100,6 +111,7 @@ pub struct Sink {
     pub notice: RwSignal<Option<Notice>>,
     /// Служба автоприменения и сохранённые значения режима «Свой».
     pub autoapply: RwSignal<(ServiceState, Saved)>,
+    pub cpu: RwSignal<CpuState>,
 }
 
 pub fn spawn(sink: Sink, simulate: bool, page: Arc<AtomicU8>, rx: Receiver<Job>) {
@@ -195,6 +207,7 @@ impl Worker {
         self.sink.power.set(power::read_state());
         self.sink.tunables.set(power::read_tunables());
         self.sink.fans.set(fans::read_fans());
+        self.sink.cpu.set(CpuState { rapl: rapl::read(), epp: cpufreq::read() });
         self.sink.battery.set(battery::read_battery());
         self.sink.toggles.set(device::read_toggles());
     }
@@ -218,7 +231,17 @@ impl Worker {
     fn handle(&mut self, job: Job) {
         match job {
             Job::SetPowerMode(m) => {
+                let was = power::read_state().mode;
                 let r = power::set_mode(m);
+                if r.is_ok() {
+                    // EC Legion помнит ручные обороты и вне «Свой» — вернуть
+                    // авто, если вентиляторы не ведёт служба.
+                    if was == Some(PowerMode::Custom) && m != PowerMode::Custom && !autoapply::load().fan_curve {
+                        autoapply::release_fans();
+                    }
+                    // Лимиты CPU/EPP под режим — на случай, если служба не запущена.
+                    let _ = autoapply::apply_cpu(m);
+                }
                 self.sysfs_result(r, format!("Режим питания: {}", m.label()));
             }
             Job::SetTunable(name, v) => {
@@ -271,6 +294,31 @@ impl Worker {
             }
             Job::RgbReset(n) => {
                 self.rgb_cmd(|kb| kb.reset_profile(n), format!("Профиль {n} сброшен к заводскому"), Some(n))
+            }
+            Job::SetFlag(flag, on) => {
+                autoapply::remember_flag(flag, on);
+                let state = if on { "включено" } else { "выключено" };
+                let what = match flag {
+                    Flag::FanCurve => "Программное авто вентиляторов",
+                    Flag::Rapl => "Лимиты CPU по режиму",
+                    Flag::Epp => "EPP по режиму",
+                };
+                let mut r = Ok(());
+                if let Some(m) = power::read_state().mode {
+                    if matches!(flag, Flag::Rapl | Flag::Epp) {
+                        r = autoapply::apply_cpu(m).map(|_| ());
+                    }
+                }
+                // Выключили программное авто — вернуть вентиляторы EC.
+                if flag == Flag::FanCurve && !on && power::read_state().mode != Some(PowerMode::Custom) {
+                    autoapply::release_fans();
+                }
+                match r {
+                    Ok(()) => self.notify(NoticeKind::Success, format!("{what}: {state}")),
+                    Err(e) => self.notify(NoticeKind::Error, format!("{what}: {e}")),
+                }
+                self.refresh_autoapply();
+                self.refresh_sysfs();
             }
         }
     }

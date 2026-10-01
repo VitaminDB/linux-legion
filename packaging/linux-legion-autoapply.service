@@ -1,5 +1,5 @@
 [Unit]
-Description=linux-legion: restore Custom mode power limits and fan speeds
+Description=linux-legion: Custom mode auto-apply, per-mode CPU limits (RAPL/EPP), fan curve
 Documentation=https://github.com/VitaminDB/linux-legion
 After=graphical-session.target
 

@@ -1,10 +1,13 @@
 //! Производительность: режимы питания, лимиты мощности и вентиляторы режима «Свой».
 
 use super::home::mode_icon;
+use crate::autoapply::Flag;
 use crate::hw::power::PowerMode;
 use crate::ui::app::AppCtx;
 use crate::ui::icons;
-use crate::ui::widgets::{access_banner, bar, card, card_with, labeled, page_header, reactive, reactive_box, setting_row};
+use crate::ui::widgets::{
+    access_banner, bar, card, card_with, kv, labeled, page_header, reactive, reactive_box, setting_row,
+};
 use crate::worker::Job;
 use syngui::prelude::*;
 use syngui::widgets::*;
@@ -30,6 +33,7 @@ pub fn view(ctx: AppCtx) -> impl Widget {
         .child(card("Режим питания", "", modes(ctx.clone())))
         .child(custom_notice(ctx.clone()))
         .child(tunables(ctx.clone()))
+        .child(cpu(ctx.clone()))
         .child(fans(ctx.clone()))
         .child(autoapply(ctx))
         .class("page")
@@ -110,9 +114,19 @@ fn tunables(ctx: AppCtx) -> impl Widget {
     let actions = move || {
         let custom = c_apply.power_mode() == Some(PowerMode::Custom);
         let dirty = !c_apply.tun_edit.get().is_empty();
-        let (ca, cr) = (c_apply.clone(), c_reset.clone());
+        let (ca, cr, cm) = (c_apply.clone(), c_reset.clone(), c_reset.clone());
         Row::new()
             .gap(8.0)
+            .child(
+                Button::new("Максимум")
+                    .icon(icons::BOLT)
+                    .disabled(!custom)
+                    .on_click(move || {
+                        let map = cm.sink.tunables.get_untracked().into_iter().map(|t| (t.name, t.max)).collect();
+                        cm.tun_edit.set(map);
+                    })
+                    .class("btn-ghost"),
+            )
             .child(
                 Button::new("По умолчанию")
                     .icon(icons::RESTART)
@@ -236,7 +250,25 @@ fn fans(ctx: AppCtx) -> impl Widget {
             }
             let custom = ctx.power_mode() == Some(PowerMode::Custom);
             let edit = ctx.fan_edit.get();
+            let (svc, saved) = ctx.sink.autoapply.get();
             let mut col = Column::new().gap(22.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+            let c = ctx.clone();
+            let desc = if saved.fan_curve && !(svc.enabled && svc.active) {
+                "Включено, но служба не запущена — включите её в разделе «Служба» ниже."
+            } else if saved.fan_curve {
+                "Служба ведёт вентиляторы по температуре CPU и видеокарты во всех режимах; \
+                 в «Свой» заданные здесь обороты держатся как есть (выше 95 °C — не ниже кривой)."
+            } else {
+                "EC Legion Pro 7 Gen 10 после ручного задания оборотов не возвращается к своей кривой: \
+                 ни по «авто», ни по смене режима, ни после сна и перезагрузки — только после сброса EC \
+                 (выключить, отсоединить питание, подержать кнопку питания 30 с). Если вы задавали \
+                 обороты вручную — включите, и вентиляторы снова будут следовать температуре."
+            };
+            col = col.child(setting_row(
+                "Программное авто (по температуре)",
+                desc,
+                Box::new(Toggle::new().on(saved.fan_curve).on_change(move |v| c.send(Job::SetFlag(Flag::FanCurve, v)))),
+            ));
             for f in list {
                 let target = edit.get(&f.index).copied().unwrap_or(f.target);
                 let auto = target == 0;
@@ -311,11 +343,11 @@ fn fans(ctx: AppCtx) -> impl Widget {
     )
 }
 
-/// Автоприменение значений «Своего» режима после перезагрузки и сна.
+/// Служба: автоприменение «Своего» после перезагрузки и сна, лимиты CPU, вентиляторы.
 fn autoapply(ctx: AppCtx) -> impl Widget {
     card_with(
         icons::RESTART,
-        "Автоприменение",
+        "Служба",
         || Text::new("").class("card-hint"),
         reactive_box(move || {
             let (svc, saved) = ctx.sink.autoapply.get();
@@ -328,16 +360,16 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
                 "Служба ставится вместе с пакетом. При сборке из исходников скопируйте \
                  packaging/linux-legion-autoapply.service в ~/.config/systemd/user/."
             } else if svc.enabled && svc.active {
-                "Служба работает: значения ниже восстанавливаются при входе в систему, \
-                 при переключении в «Свой» и после выхода из сна."
+                "Служба работает: восстанавливает значения «Своего» при входе, при переключении в «Свой» \
+                 и после сна, держит лимиты CPU и EPP по режиму, ведёт вентиляторы по температуре."
             } else if svc.enabled {
                 "Служба включена, но сейчас не запущена — проверьте journalctl --user -u linux-legion-autoapply."
             } else {
-                "Прошивка забывает лимиты и обороты после перезагрузки, а обороты — и после сна. \
-                 Служба будет восстанавливать их сама."
+                "Прошивка забывает лимиты и обороты после перезагрузки, а лимиты CPU в RAPL вообще никто, \
+                 кроме службы, не выставляет. Служба делает это сама (linux-legion --daemon)."
             };
             col = col.child(setting_row(
-                "Применять после перезагрузки",
+                "Служба linux-legion",
                 desc,
                 Box::new(
                     Toggle::new()
@@ -375,6 +407,86 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
                     list = list.child(crate::ui::widgets::kv(k, v.to_string()));
                 }
                 col = col.child(Text::new("Сохранённые значения").class("field-label")).child(list);
+            }
+            Box::new(col)
+        }),
+    )
+}
+
+/// Лимиты CPU (RAPL) и EPP по режиму — то, что в Windows делает Legion Space.
+fn cpu(ctx: AppCtx) -> impl Widget {
+    card_with(
+        icons::MEMORY,
+        "Процессор по режимам",
+        || Text::new("").class("card-hint"),
+        reactive_box(move || {
+            let st = ctx.sink.cpu.get();
+            let (_, saved) = ctx.sink.autoapply.get();
+            let power = ctx.sink.power.get();
+            if !st.rapl.present() && st.epp.current.is_none() {
+                return Box::new(Text::new("RAPL (powercap) и EPP (cpufreq) недоступны.").class("muted"));
+            }
+            let mut col = Column::new().gap(16.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+            let fmt = |l: Option<crate::hw::rapl::Limits>| match l {
+                Some(l) => format!("{} / {} Вт", l.pl1, l.pl2),
+                None => "—".to_string(),
+            };
+            if st.rapl.present() {
+                let c = ctx.clone();
+                let desc = if !st.rapl.writable {
+                    "Нет прав на запись в powercap — обновите udev-правило пакета (группа wheel)."
+                } else {
+                    "BIOS при загрузке ставит в RAPL MMIO 30/30 Вт и больше их не меняет: без этого \
+                     процессор во всех режимах упирается в 30 Вт. Служба держит в RAPL (MSR и MMIO) \
+                     заводские лимиты режима, а в «Свой» — лимиты, заданные выше."
+                };
+                col = col.child(setting_row(
+                    "Лимиты CPU по режиму (RAPL)",
+                    desc,
+                    Box::new(
+                        Toggle::new()
+                            .on(saved.rapl)
+                            .on_change(move |v| c.send(Job::SetFlag(Flag::Rapl, v)))
+                            .class(if st.rapl.writable { "" } else { "toggle-off" }),
+                    ),
+                ));
+                let mut list = Column::new().gap(2.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+                let modes = if power.choices.is_empty() { PowerMode::ALL.to_vec() } else { power.choices.clone() };
+                for m in modes {
+                    let v = saved.limits_for(m);
+                    let mark = if power.mode == Some(m) { " ●" } else { "" };
+                    list = list.child(kv(&format!("{}{mark}", m.label()), fmt(v)));
+                }
+                list = list.child(kv("Сейчас в RAPL: MSR", fmt(st.rapl.msr)));
+                list = list.child(kv("Сейчас в RAPL: MMIO", fmt(st.rapl.mmio)));
+                col = col.child(Text::new("PL1 / PL2 по режимам (свои — rapl.<режим>=PL1/PL2 в custom.conf)").class("field-label")).child(list);
+            }
+            if let Some(cur) = st.epp.current.clone() {
+                let c = ctx.clone();
+                let desc = if !st.epp.writable {
+                    "Нет прав на запись EPP — обновите udev-правило пакета (группа wheel)."
+                } else {
+                    "performance в Производительность/Экстрим/Свой, balance_performance в Балансе, \
+                     balance_power в Тихом. Перекрывает tuned и power-profiles-daemon. Без performance \
+                     процессор не добирает верхние ступени turbo."
+                };
+                let want = power.mode.map(|m| m.epp()).unwrap_or("—");
+                col = col.child(setting_row(
+                    "EPP по режиму",
+                    desc,
+                    Box::new(
+                        Toggle::new()
+                            .on(saved.epp)
+                            .on_change(move |v| c.send(Job::SetFlag(Flag::Epp, v)))
+                            .class(if st.epp.writable { "" } else { "toggle-off" }),
+                    ),
+                ));
+                let now = if st.epp.pinned() {
+                    format!("{cur} — governor performance, EPP прибит к performance")
+                } else {
+                    format!("{cur} (для режима: {want})")
+                };
+                col = col.child(kv("EPP сейчас", now));
             }
             Box::new(col)
         }),

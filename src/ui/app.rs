@@ -63,6 +63,7 @@ impl AppCtx {
                 busy: use_signal(false),
                 notice: use_signal(None),
                 autoapply: use_signal(Default::default()),
+                cpu: use_signal(Default::default()),
             },
             page: use_signal(0usize),
             tun_edit: use_signal(BTreeMap::new()),
