@@ -22,6 +22,6 @@ pkgbase = linux-legion
 	options = !lto
 	options = !debug
 	source = linux-legion-0.1.3.tar.gz::https://github.com/VitaminDB/linux-legion/archive/refs/tags/v0.1.3.tar.gz
-	sha256sums = 4c465fc44a8c7cff800fc992bedbf9ac062db4b17da75e77c6f069ea92999f15
+	sha256sums = e6df723ba3c7b3258c60bf2d51bbd470c08ed259f3d451579ffaa1dbab730fac
 
 pkgname = linux-legion
