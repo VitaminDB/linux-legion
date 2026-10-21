@@ -236,13 +236,13 @@ impl Preset {
 
     pub fn label(self) -> &'static str {
         match self {
-            Preset::All => "Все зоны",
-            Preset::Keyboard => "Клавиатура",
-            Preset::Case => "Корпус",
+            Preset::All => t!("Все зоны", "All zones"),
+            Preset::Keyboard => t!("Клавиатура", "Keyboard"),
+            Preset::Case => t!("Корпус", "Case"),
             Preset::Wasd => "WASD",
-            Preset::Arrows => "Стрелки",
-            Preset::FRow => "F-ряд",
-            Preset::Digits => "Цифры",
+            Preset::Arrows => t!("Стрелки", "Arrows"),
+            Preset::FRow => t!("F-ряд", "F keys"),
+            Preset::Digits => t!("Цифры", "Number row"),
         }
     }
 }

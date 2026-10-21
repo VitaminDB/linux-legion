@@ -7,7 +7,10 @@
 //! `linux_legion --apply`      — применить сохранённые значения режима «Свой»;
 //! `linux_legion --daemon`     — служба автоприменения (см. `autoapply`);
 //! `LEGION_TRACE=1`            — печатать пакеты подсветки в stderr.
+//! `LINUX_LEGION_LANG=ru|en`  — язык интерфейса (иначе по локали, см. `i18n`).
 
+#[macro_use]
+mod i18n;
 mod autoapply;
 mod hw;
 mod spectrum;
@@ -33,10 +36,10 @@ fn main() {
     }
     if args.iter().any(|a| a == "--apply") {
         match autoapply::apply() {
-            Ok(done) if done.is_empty() => println!("нечего применять (режим не «Свой» или значения уже стоят)"),
-            Ok(done) => println!("применено: {}", done.join(", ")),
+            Ok(done) if done.is_empty() => println!("{}", t!("нечего применять (режим не «Свой» или значения уже стоят)", "nothing to apply (mode is not “Custom” or the values are already set)")),
+            Ok(done) => println!("{}", tf!("применено: {}", "applied: {}", done.join(", "))),
             Err(e) => {
-                eprintln!("ошибка: {e}");
+                eprintln!("{}", tf!("ошибка: {e}", "error: {e}"));
                 std::process::exit(1);
             }
         }

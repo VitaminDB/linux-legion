@@ -23,7 +23,8 @@ service keeps the CPU power limits and fans in line with the selected mode).
 |---|---|---|
 | ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
 
-> The interface is in Russian for now.
+> The interface is in Russian, or in English when the locale is English (`LANG=en_US.UTF-8` and
+> the like). `LINUX_LEGION_LANG=ru` or `en` picks one regardless of the locale.
 
 ## What it does
 
@@ -93,6 +94,7 @@ linux_legion --daemon        # the auto-apply service (linux-legion-autoapply.se
 linux_legion --simulate      # demo mode with a simulated Legion Pro 7
 linux_legion --page 2        # open a page (0 home … 4 device)
 LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
+LINUX_LEGION_LANG=en linux_legion  # English interface whatever the locale
 ```
 
 ## The service

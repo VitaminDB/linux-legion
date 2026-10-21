@@ -17,12 +17,12 @@ use syngui::widgets::GestureDetector;
 const BRAND_PNG: &[u8] = include_bytes!("../../assets/icon/linux-legion-128.png");
 
 /// Разделы навигации.
-pub const PAGES: [(&str, &str); 5] = [
-    ("Главная", icons::DASHBOARD),
-    ("Производительность", icons::SPEED),
-    ("Подсветка", icons::PALETTE),
-    ("Батарея", icons::BATTERY_FULL),
-    ("Устройство", icons::LAPTOP),
+pub const PAGES: [((&str, &str), &str); 5] = [
+    (("Главная", "Home"), icons::DASHBOARD),
+    (("Производительность", "Performance"), icons::SPEED),
+    (("Подсветка", "Lighting"), icons::PALETTE),
+    (("Батарея", "Battery"), icons::BATTERY_FULL),
+    (("Устройство", "Device"), icons::LAPTOP),
 ];
 
 #[derive(Clone)]
@@ -182,7 +182,7 @@ fn pill(content: impl Widget + 'static) -> impl Widget {
 fn mode_pill(ctx: &AppCtx) -> impl Widget {
     let (tone, text) = match ctx.power_mode() {
         Some(m) => (m.tone(), m.label()),
-        None => ("idle", "Режим неизвестен"),
+        None => ("idle", t!("Режим неизвестен", "Unknown mode")),
     };
     pill(
         Row::new()
@@ -219,8 +219,9 @@ fn battery_pill(b: Option<Battery>) -> Box<dyn Widget> {
 
 fn nav(ctx: AppCtx) -> impl Widget {
     let mut col = Column::new().gap(6.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
-    col = col.child(Text::new("ЦЕНТР УПРАВЛЕНИЯ").class("nav-caption"));
-    for (i, (label, icon)) in PAGES.into_iter().enumerate() {
+    col = col.child(Text::new(t!("ЦЕНТР УПРАВЛЕНИЯ", "CONTROL CENTER")).class("nav-caption"));
+    for (i, ((ru, en), icon)) in PAGES.into_iter().enumerate() {
+        let label = crate::i18n::pick(ru, en);
         let (c, sel) = (ctx.clone(), ctx.page);
         col = col.child(
             GestureDetector::new()
@@ -275,7 +276,7 @@ fn footer(ctx: AppCtx) -> impl Widget {
         .child(widgets::reactive_box(move || status_line(&c)))
         .child(DecoratedBox::new().class("grow"))
         .child(move || {
-            let text = if ctx.simulate { "демо-режим · данные имитированы" } else { concat!("linux-legion ", env!("CARGO_PKG_VERSION")) };
+            let text = if ctx.simulate { t!("демо-режим · данные имитированы", "demo mode · simulated data") } else { concat!("linux-legion ", env!("CARGO_PKG_VERSION")) };
             Text::new(text).class("footer-note")
         })
         .class("footer")
@@ -288,7 +289,7 @@ fn status_line(ctx: &AppCtx) -> Box<dyn Widget> {
                 .gap(10.0)
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .child(CircularProgress::new().indeterminate().size(16.0).stroke_width(2.0))
-                .child(Text::new("Запись в контроллер…").class("status-text")),
+                .child(Text::new(t!("Запись в контроллер…", "Writing to controller…")).class("status-text")),
         );
     }
     match ctx.sink.notice.get() {
@@ -305,6 +306,6 @@ fn status_line(ctx: &AppCtx) -> Box<dyn Widget> {
                     .child(Text::new(n.text).class("status-text")),
             )
         }
-        None => Box::new(Text::new("Готово").class("status-text")),
+        None => Box::new(Text::new(t!("Готово", "Ready")).class("status-text")),
     }
 }

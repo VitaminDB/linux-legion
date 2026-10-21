@@ -145,7 +145,7 @@ impl Saved {
     }
 
     fn render(&self) -> String {
-        let mut out = String::from("# linux-legion: настройки службы и режима «Свой»\n");
+        let mut out = String::from(t!("# linux-legion: настройки службы и режима «Свой»\n", "# linux-legion: service settings and “Custom” mode values\n"));
         for (k, v) in &self.tunables {
             out.push_str(&format!("tunable.{k}={v}\n"));
         }
@@ -260,7 +260,7 @@ pub fn apply_cpu(mode: PowerMode) -> Result<Vec<String>, String> {
                 Ok(d) => done.extend(d),
                 Err(e) => errors.push(e.to_string()),
             },
-            None => errors.push("лимиты «Свой»: атрибуты прошивки не найдены".into()),
+            None => errors.push(t!("лимиты «Свой»: атрибуты прошивки не найдены", "“Custom” limits: firmware attributes not found").into()),
         }
     }
     if saved.epp && cpufreq::read().current.is_some() {
@@ -293,7 +293,7 @@ pub fn release_fans() -> Vec<String> {
     fans::read_fans()
         .iter()
         .filter(|f| f.writable)
-        .filter_map(|f| fans::set_target(f.index, 0).ok().map(|_| format!("fan{}=авто", f.index)))
+        .filter_map(|f| fans::set_target(f.index, 0).ok().map(|_| tf!("fan{}=авто", "fan{}=auto", f.index)))
         .collect()
 }
 
@@ -427,15 +427,15 @@ pub fn daemon() -> ! {
         Ok(_) => {}
         Err(e) => log(format!("{why}: {e}")),
     };
-    log("служба запущена".into());
+    log(t!("служба запущена", "service started").into());
     // Драйверам после загрузки нужна пара секунд.
     std::thread::sleep(Duration::from_secs(2));
     let mut saved = load();
     let mut conf_mtime = std::fs::metadata(path()).and_then(|m| m.modified()).ok();
     let mut mode = power::read_state().mode;
-    report("старт", apply_custom());
+    report(t!("старт", "startup"), apply_custom());
     if let Some(m) = mode {
-        report("старт", apply_cpu(m));
+        report(t!("старт", "startup"), apply_cpu(m));
     }
     let mut curve = FanCurve::default();
     let mut last_sleep = sleep_offset();
@@ -453,7 +453,7 @@ pub fn daemon() -> ! {
             }
             saved = fresh;
             if let Some(m) = mode {
-                report("настройки", apply_cpu(m));
+                report(t!("настройки", "settings"), apply_cpu(m));
             }
         }
         let now_mode = power::read_state().mode;
@@ -461,23 +461,23 @@ pub fn daemon() -> ! {
         if slept > last_sleep + Duration::from_secs(1) {
             // После сна EC сбрасывает обороты не сразу — чуть подождать.
             std::thread::sleep(Duration::from_secs(2));
-            report("после сна", apply_custom());
+            report(t!("после сна", "after sleep"), apply_custom());
             if let Some(m) = now_mode {
-                report("после сна", apply_cpu(m));
+                report(t!("после сна", "after sleep"), apply_cpu(m));
             }
             curve.last.clear();
         } else if now_mode != mode {
             if now_mode == Some(PowerMode::Custom) {
                 std::thread::sleep(Duration::from_millis(500));
-                report("включён «Свой»", apply_custom());
+                report(t!("включён «Свой»", "switched to “Custom”"), apply_custom());
             } else if mode == Some(PowerMode::Custom) && !saved.fan_curve {
                 let done = release_fans();
                 if !done.is_empty() {
-                    log(format!("выключен «Свой»: {}", done.join(", ")));
+                    log(tf!("выключен «Свой»: {}", "switched away from “Custom”: {}", done.join(", ")));
                 }
             }
             if let Some(m) = now_mode {
-                report("режим", apply_cpu(m));
+                report(t!("режим", "mode"), apply_cpu(m));
             }
             curve.last.clear();
             next_cpu = Instant::now() + CPU_PERIOD;
@@ -489,14 +489,14 @@ pub fn daemon() -> ! {
         if now >= next_cpu {
             next_cpu = now + CPU_PERIOD;
             if let Some(m) = mode {
-                report("лимиты", apply_cpu(m));
+                report(t!("лимиты", "limits"), apply_cpu(m));
             }
         }
         if saved.fan_curve && now >= next_fan {
             next_fan = now + FAN_PERIOD;
             let done = curve.tick(mode, &saved);
             if !done.is_empty() {
-                log(format!("вентиляторы: {}", done.join(", ")));
+                log(tf!("вентиляторы: {}", "fans: {}", done.join(", ")));
             }
         }
     }

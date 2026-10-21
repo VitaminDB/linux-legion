@@ -24,16 +24,16 @@ impl Toggle {
     pub fn label(self) -> &'static str {
         match self {
             Toggle::FnLock => "Fn Lock",
-            Toggle::Camera => "Питание веб-камеры",
-            Toggle::UsbCharging => "Зарядка по USB в выключенном состоянии",
+            Toggle::Camera => t!("Питание веб-камеры", "Camera power"),
+            Toggle::UsbCharging => t!("Зарядка по USB в выключенном состоянии", "USB charging while off"),
         }
     }
 
     pub fn hint(self) -> &'static str {
         match self {
-            Toggle::FnLock => "F1–F12 работают как функциональные клавиши без удержания Fn.",
-            Toggle::Camera => "Выключает камеру аппаратно — ни одна программа не сможет её включить.",
-            Toggle::UsbCharging => "Порт USB с молнией заряжает телефон, даже когда ноутбук выключен или спит.",
+            Toggle::FnLock => t!("F1–F12 работают как функциональные клавиши без удержания Fn.", "F1–F12 act as function keys without holding Fn."),
+            Toggle::Camera => t!("Выключает камеру аппаратно — ни одна программа не сможет её включить.", "Turns the camera off in hardware — no app can turn it back on."),
+            Toggle::UsbCharging => t!("Порт USB с молнией заряжает телефон, даже когда ноутбук выключен или спит.", "The USB port with the lightning icon charges your phone even when the laptop is off or asleep."),
         }
     }
 }

@@ -20,11 +20,11 @@ pub fn view(ctx: AppCtx) -> impl Widget {
     Column::new()
         .gap(18.0)
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .child(page_header("Устройство", "Аппаратные переключатели и сведения о ноутбуке."))
+        .child(page_header(t!("Устройство", "Device"), t!("Аппаратные переключатели и сведения о ноутбуке.", "Hardware switches and laptop details.")))
         .child(reactive_box(move || {
             let t = c_t.sink.toggles.get();
             if t.items.is_empty() {
-                return Box::new(card("Переключатели", "", Text::new("Драйвер ideapad_acpi не найден.").class("muted")));
+                return Box::new(card(t!("Переключатели", "Switches"), "", Text::new(t!("Драйвер ideapad_acpi не найден.", "ideapad_acpi driver not found.")).class("muted")));
             }
             let mut col = Column::new().gap(18.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             if t.items.iter().any(|i| !i.2) {
@@ -58,10 +58,10 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                         ),
                 );
             }
-            Box::new(col.child(card("Переключатели", "", rows)))
+            Box::new(col.child(card(t!("Переключатели", "Switches"), "", rows)))
         }))
         .child(card(
-            "О системе",
+            t!("О системе", "About"),
             "",
             reactive(move || {
                 let i = c_i.sink.info.get();
@@ -69,14 +69,14 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                 Column::new()
                     .gap(2.0)
                     .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .child(kv("Модель", format!("{} {}", i.vendor, i.model)))
-                    .child(kv("Машинный тип", i.machine_type.clone()))
+                    .child(kv(t!("Модель", "Model"), format!("{} {}", i.vendor, i.model)))
+                    .child(kv(t!("Машинный тип", "Machine type"), i.machine_type.clone()))
                     .child(kv("BIOS", format!("{} ({})", i.bios, i.bios_date)))
-                    .child(kv("Процессор", format!("{} · {} потоков", i.cpu, i.cpu_threads)))
-                    .child(kv("Видеокарта", if i.gpu.is_empty() { "—".into() } else { i.gpu.clone() }))
-                    .child(kv("Память", format!("{:.1} ГБ", i.memory_gb)))
-                    .child(kv("Контроллер подсветки", if rgb.name.is_empty() { "—".into() } else { rgb.name.clone() }))
-                    .child(kv("Система", format!("{} · ядро {}", i.os, i.kernel)))
+                    .child(kv(t!("Процессор", "CPU"), tf!("{} · {} потоков", "{} · {} threads", i.cpu, i.cpu_threads)))
+                    .child(kv(t!("Видеокарта", "GPU"), if i.gpu.is_empty() { "—".into() } else { i.gpu.clone() }))
+                    .child(kv(t!("Память", "Memory"), tf!("{:.1} ГБ", "{:.1} GB", i.memory_gb)))
+                    .child(kv(t!("Контроллер подсветки", "Lighting controller"), if rgb.name.is_empty() { "—".into() } else { rgb.name.clone() }))
+                    .child(kv(t!("Система", "System"), tf!("{} · ядро {}", "{} · kernel {}", i.os, i.kernel)))
             }),
         ))
         .class("page")

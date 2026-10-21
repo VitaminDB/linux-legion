@@ -43,21 +43,21 @@ impl PowerMode {
 
     pub fn label(self) -> &'static str {
         match self {
-            PowerMode::Quiet => "Тихий",
-            PowerMode::Balanced => "Баланс",
-            PowerMode::Performance => "Производительность",
-            PowerMode::Extreme => "Экстрим",
-            PowerMode::Custom => "Свой",
+            PowerMode::Quiet => t!("Тихий", "Quiet"),
+            PowerMode::Balanced => t!("Баланс", "Balanced"),
+            PowerMode::Performance => t!("Производительность", "Performance"),
+            PowerMode::Extreme => t!("Экстрим", "Extreme"),
+            PowerMode::Custom => t!("Свой", "Custom"),
         }
     }
 
     pub fn hint(self) -> &'static str {
         match self {
-            PowerMode::Quiet => "Тишина и холодный корпус, ниже производительность",
-            PowerMode::Balanced => "Автоматический баланс шума и мощности",
-            PowerMode::Performance => "Максимальная мощность для игр и работы",
-            PowerMode::Extreme => "Мощность сверх штатной, вентиляторы на пределе",
-            PowerMode::Custom => "Ваши лимиты мощности и обороты вентиляторов",
+            PowerMode::Quiet => t!("Тишина и холодный корпус, ниже производительность", "Silent and cool, lower performance"),
+            PowerMode::Balanced => t!("Автоматический баланс шума и мощности", "Automatic balance of noise and power"),
+            PowerMode::Performance => t!("Максимальная мощность для игр и работы", "Maximum power for gaming and work"),
+            PowerMode::Extreme => t!("Мощность сверх штатной, вентиляторы на пределе", "Beyond stock power, fans at their limit"),
+            PowerMode::Custom => t!("Ваши лимиты мощности и обороты вентиляторов", "Your own power limits and fan speeds"),
         }
     }
 
@@ -181,16 +181,16 @@ fn attrs_dir() -> Option<PathBuf> {
 /// Подписи известных атрибутов: (название, пояснение, единица).
 fn describe(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
-        "ppt_pl1_spl" => ("CPU: длительная мощность (PL1)", "Мощность, которую процессор держит неограниченно долго.", "Вт"),
-        "ppt_pl2_sppt" => ("CPU: кратковременная мощность (PL2)", "Всплеск мощности на десятки секунд под нагрузкой.", "Вт"),
-        "ppt_pl3_fppt" => ("CPU: пиковая мощность (PL3)", "Короткие пики в миллисекунды.", "Вт"),
-        "ppt_pl1_apu_spl" => ("APU: длительная мощность", "Лимит мощности встроенной графики.", "Вт"),
-        "cpu_temp" => ("CPU: температурный предел", "Температура, при которой процессор сбрасывает частоту.", "°C"),
-        "gpu_temp" => ("GPU: температурный предел", "Температура, при которой видеокарта сбрасывает частоту.", "°C"),
-        "gpu_nv_ctgp" => ("GPU: настраиваемый TGP", "Базовая мощность видеокарты NVIDIA.", "Вт"),
-        "gpu_nv_ppab" => ("GPU: Dynamic Boost", "Мощность, которую видеокарта забирает у процессора.", "Вт"),
-        "gpu_nv_tpp" => ("GPU: полная мощность", "Суммарный лимит видеокарты.", "Вт"),
-        "gpu_nv_cpu_boost" => ("GPU: буст при нагрузке CPU", "", "Вт"),
+        "ppt_pl1_spl" => (t!("CPU: длительная мощность (PL1)", "CPU: sustained power (PL1)"), t!("Мощность, которую процессор держит неограниченно долго.", "Power the CPU can hold indefinitely."), t!("Вт", "W")),
+        "ppt_pl2_sppt" => (t!("CPU: кратковременная мощность (PL2)", "CPU: short-term power (PL2)"), t!("Всплеск мощности на десятки секунд под нагрузкой.", "Power burst for tens of seconds under load."), t!("Вт", "W")),
+        "ppt_pl3_fppt" => (t!("CPU: пиковая мощность (PL3)", "CPU: peak power (PL3)"), t!("Короткие пики в миллисекунды.", "Brief peaks lasting milliseconds."), t!("Вт", "W")),
+        "ppt_pl1_apu_spl" => (t!("APU: длительная мощность", "APU: sustained power"), t!("Лимит мощности встроенной графики.", "Power limit of the integrated graphics."), t!("Вт", "W")),
+        "cpu_temp" => (t!("CPU: температурный предел", "CPU: temperature limit"), t!("Температура, при которой процессор сбрасывает частоту.", "Temperature at which the CPU throttles."), "°C"),
+        "gpu_temp" => (t!("GPU: температурный предел", "GPU: temperature limit"), t!("Температура, при которой видеокарта сбрасывает частоту.", "Temperature at which the GPU throttles."), "°C"),
+        "gpu_nv_ctgp" => (t!("GPU: настраиваемый TGP", "GPU: configurable TGP"), t!("Базовая мощность видеокарты NVIDIA.", "Base power of the NVIDIA GPU."), t!("Вт", "W")),
+        "gpu_nv_ppab" => ("GPU: Dynamic Boost", t!("Мощность, которую видеокарта забирает у процессора.", "Power the GPU borrows from the CPU."), t!("Вт", "W")),
+        "gpu_nv_tpp" => (t!("GPU: полная мощность", "GPU: total power"), t!("Суммарный лимит видеокарты.", "Total GPU power limit."), t!("Вт", "W")),
+        "gpu_nv_cpu_boost" => (t!("GPU: буст при нагрузке CPU", "GPU: boost under CPU load"), "", t!("Вт", "W")),
         _ => return None,
     })
 }

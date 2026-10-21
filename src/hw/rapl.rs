@@ -110,7 +110,7 @@ pub fn set(want: Limits) -> Result<Vec<String>> {
             continue;
         }
         match write_zone(zone, cur, want) {
-            Ok(()) => done.push(format!("{} {}/{} Вт", if *mmio { "mmio" } else { "msr" }, want.pl1, want.pl2)),
+            Ok(()) => done.push(tf!("{} {}/{} Вт", "{} {}/{} W", if *mmio { "mmio" } else { "msr" }, want.pl1, want.pl2)),
             Err(_) if !*mmio && has_mmio => {}
             Err(e) => return Err(e),
         }

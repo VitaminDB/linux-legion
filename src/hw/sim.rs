@@ -136,5 +136,5 @@ fn spawn_drift(root: PathBuf) {
                 }
             }
         })
-        .expect("не удалось запустить поток симулятора");
+        .expect(t!("не удалось запустить поток симулятора", "failed to start the simulator thread"));
 }
