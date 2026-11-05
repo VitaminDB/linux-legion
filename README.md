@@ -15,6 +15,9 @@ service keeps the CPU power limits and fans in line with the selected mode).
 
 ![Home](screenshots/home.png)
 
+<p align="center"><img src="screenshots/lighting.gif" width="900" alt="Live Spectrum lighting map"><br>
+<sub>The lighting map is a live frame read back from the keyboard controller (here: rainbow wave + rainbow spiral)</sub></p>
+
 | Spectrum lighting — live map | Effect layers |
 |---|---|
 | ![Lighting](screenshots/lighting.png) | ![Layers](screenshots/lighting-layers.png) |
@@ -23,7 +26,8 @@ service keeps the CPU power limits and fans in line with the selected mode).
 |---|---|---|
 | ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
 
-> The interface is in Russian for now.
+The interface speaks 14 languages and follows the system language; switch it live from the header.
+Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux_legion --screenshot` (see [Usage](#usage)).
 
 ## What it does
 
@@ -96,6 +100,8 @@ linux_legion --daemon        # the auto-apply service (linux-legion-autoapply.se
 linux_legion --simulate      # demo mode with a simulated Legion Pro 7
 linux_legion --page 2        # open a page (0 home … 4 device)
 linux_legion --screenshot out.png  # render the window to a PNG without showing it
+#   --scale 1.33  --size 1360x1000  --scroll-to lighting-layers
+#   --frames 60 --interval 100 --screenshot 'f{n}.png'   # frame series (the GIF above)
 LEGION_LANG=de linux_legion  # interface language (overrides the choice in the header)
 LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
 ```

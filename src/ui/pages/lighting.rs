@@ -106,13 +106,15 @@ fn editor(ctx: AppCtx) -> impl Widget {
                 .child(DecoratedBox::new().child(card(t!("Яркость и логотип"), t!("Fn + Пробел долгим нажатием — яркость"), brightness(ctx.clone()))).class("grow")),
         )
         .child(scheme_card(ctx.clone()))
-        .child(
+        // Имя — для `--scroll-to lighting-layers` (снимки для README).
+        .child(syngui::widgets::Named::new(
+            "lighting-layers",
             Row::new()
                 .gap(18.0)
                 .cross_axis_alignment(CrossAxisAlignment::Start)
                 .child(DecoratedBox::new().child(layers_card(ctx.clone())).class("layers-col"))
                 .child(DecoratedBox::new().child(layer_editor(ctx.clone())).class("grow")),
-        )
+        ))
         .child(save_bar(ctx))
 }
 

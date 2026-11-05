@@ -5,6 +5,8 @@
 //! `linux_legion --simulate`   — демо-режим без железа;
 //! `linux_legion --page N`     — открыть раздел N (0 главная … 4 устройство);
 //! `linux_legion --screenshot F` — снимок окна в PNG без показа окна;
+//!   `--scale 1.33`, `--size 1360x1000`, `--scroll-to lighting-layers`, серия кадров —
+//!   `--frames 60 --interval 80` и `{n}` в имени файла (номер кадра);
 //! `LEGION_LANG=en`             — язык интерфейса (главнее выбора в шапке);
 //! `linux_legion --apply`      — применить сохранённые значения режима «Свой»;
 //! `linux_legion --daemon`     — служба автоприменения (см. `autoapply`);
@@ -30,6 +32,7 @@ const ICON: &[u8] = include_bytes!("../assets/icon/linux-legion-256.png");
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let simulate = args.iter().any(|a| a == "--simulate");
+    let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     if simulate {
         let root = hw::sim::install();
         autoapply::set_dir(root.join("config"));
@@ -54,13 +57,39 @@ fn main() {
     if let Some(n) = args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)?.parse().ok()) {
         ctx.go(n);
     }
-    if let Some(out) = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)) {
-        let opts = syngui::shot::ShotOptions { wait: std::time::Duration::from_millis(2500), ..Default::default() };
+    if let Some(out) = arg("--screenshot") {
+        let num = |name: &str, default: f64| arg(name).and_then(|v| v.parse().ok()).unwrap_or(default);
+        let scale = num("--scale", 1.0);
+        let size = arg("--size")
+            .and_then(|s| {
+                let (w, h) = s.split_once('x')?;
+                Some((w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or((1360, 900));
+        // Прокрутка к именованному участку: запрос — когда страница уже разложена.
+        let scroll_to = arg("--scroll-to");
+        let calls = std::cell::Cell::new(0u32);
+        let ready = move || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 4 {
+                if let Some(name) = &scroll_to {
+                    syngui::widgets::scroll_to_named(name.clone());
+                }
+            }
+            calls.get() >= 8
+        };
+        let opts = syngui::shot::ShotOptions {
+            wait: std::time::Duration::from_millis(2500),
+            ready: Some(Box::new(ready)),
+            frames: num("--frames", 1.0) as u32,
+            interval: std::time::Duration::from_millis(num("--interval", 100.0) as u64),
+            ..Default::default()
+        };
         let build = move || -> Box<dyn Widget> {
             ctx.start();
             Box::new(build_root(ctx.clone()))
         };
-        if let Err(e) = syngui::shot::render_png_with(build, STYLES, (1360, 900), 1.0, out, opts) {
+        if let Err(e) = syngui::shot::render_png_with(build, STYLES, size, scale, &out, opts) {
             eprintln!("{e}");
             std::process::exit(1);
         }
