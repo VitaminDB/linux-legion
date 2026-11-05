@@ -195,6 +195,14 @@ fn describe(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     })
 }
 
+impl Tunable {
+    /// Диапазон не пустой: прошивка разрешает менять значение (у части
+    /// атрибутов в некоторых режимах `min = max = 0`).
+    pub fn adjustable(&self) -> bool {
+        self.max > self.min
+    }
+}
+
 pub fn read_tunables() -> Vec<Tunable> {
     let Some(dir) = attrs_dir() else { return Vec::new() };
     let Ok(rd) = std::fs::read_dir(&dir) else { return Vec::new() };

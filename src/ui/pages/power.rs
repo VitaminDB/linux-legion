@@ -2,7 +2,7 @@
 
 use super::home::mode_icon;
 use crate::autoapply::Flag;
-use crate::hw::power::PowerMode;
+use crate::hw::power::{PowerMode, Tunable};
 use crate::ui::app::AppCtx;
 use crate::ui::icons;
 use crate::ui::widgets::{
@@ -122,7 +122,8 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                     .icon(icons::BOLT)
                     .disabled(!custom)
                     .on_click(move || {
-                        let map = cm.sink.tunables.get_untracked().into_iter().map(|t| (t.name, t.max)).collect();
+                        // Атрибуты с пустым диапазоном (0–0) не трогать: у них max = 0.
+                        let map = cm.sink.tunables.get_untracked().into_iter().filter(Tunable::adjustable).map(|t| (t.name, t.max)).collect();
                         cm.tun_edit.set(map);
                     })
                     .class("btn-ghost"),
@@ -137,6 +138,7 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                             .tunables
                             .get_untracked()
                             .into_iter()
+                            .filter(Tunable::adjustable)
                             .filter_map(|t| t.default.map(|d| (t.name, d)))
                             .collect();
                         cr.tun_edit.set(map);
@@ -161,7 +163,8 @@ fn tunables(ctx: AppCtx) -> impl Widget {
         t!("Лимиты мощности"),
         actions,
         reactive_box(move || {
-            let list = ctx.sink.tunables.get();
+            // Прошивка отдаёт часть атрибутов с диапазоном 0–0 (в этом режиме не меняются) — скрыть.
+            let list: Vec<Tunable> = ctx.sink.tunables.get().into_iter().filter(Tunable::adjustable).collect();
             if list.is_empty() {
                 return Box::new(
                     Text::new(t!("Драйвер lenovo-wmi-other не отдаёт настраиваемых лимитов на этой модели.")).class("muted"),
