@@ -179,7 +179,7 @@ impl Transport for SimTransport {
     }
 
     fn name(&self) -> String {
-        "симулятор Spectrum".into()
+        t!("симулятор Spectrum").into()
     }
 }
 

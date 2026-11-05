@@ -45,7 +45,7 @@ pub fn set_dir(dir: PathBuf) {
     let _ = DIR.set(dir);
 }
 
-fn dir() -> PathBuf {
+pub fn dir() -> PathBuf {
     DIR.get().cloned().unwrap_or_else(|| {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)

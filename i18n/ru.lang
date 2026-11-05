@@ -1,0 +1,4 @@
+# linux-legion: язык исходных строк — переводить не нужно
+@tag = "ru"
+@name = "Русский"
+@english = "Russian"

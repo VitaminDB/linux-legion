@@ -147,22 +147,22 @@ impl EffectType {
         })
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         use EffectType::*;
         match self {
-            Always => "Статичный цвет",
-            RainbowWave => "Радужная волна",
-            RainbowScrew => "Радужная спираль",
-            ColorWave => "Цветная волна",
-            ColorChange => "Смена цветов",
-            ColorPulse => "Пульсация",
-            Smooth => "Плавный переход",
-            Rain => "Дождь",
-            Ripple => "Рябь от нажатий",
-            Type => "Подсветка нажатий",
-            AudioBounce => "Эквалайзер",
-            AudioRipple => "Звуковая рябь",
-            AuroraSync => "Синхронизация с экраном",
+            Always => t!("Статичный цвет"),
+            RainbowWave => t!("Радужная волна"),
+            RainbowScrew => t!("Радужная спираль"),
+            ColorWave => t!("Цветная волна"),
+            ColorChange => t!("Смена цветов"),
+            ColorPulse => t!("Пульсация"),
+            Smooth => t!("Плавный переход"),
+            Rain => t!("Дождь"),
+            Ripple => t!("Рябь от нажатий"),
+            Type => t!("Подсветка нажатий"),
+            AudioBounce => t!("Эквалайзер"),
+            AudioRipple => t!("Звуковая рябь"),
+            AuroraSync => t!("Синхронизация с экраном"),
         }
     }
 
@@ -226,13 +226,13 @@ impl Direction {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Direction::LeftToRight => "Вправо",
-            Direction::RightToLeft => "Влево",
-            Direction::BottomToTop => "Вверх",
-            Direction::TopToBottom => "Вниз",
-            Direction::None => "—",
+            Direction::LeftToRight => t!("Вправо"),
+            Direction::RightToLeft => t!("Влево"),
+            Direction::BottomToTop => t!("Вверх"),
+            Direction::TopToBottom => t!("Вниз"),
+            Direction::None => t!("—"),
         }
     }
 }
@@ -349,9 +349,9 @@ impl fmt::Display for EncodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EncodeError::TooLarge(n) => {
-                write!(f, "описание профиля занимает {n} байт из {REPORT_LEN} — уменьшите число слоёв")
+                write!(f, "{}", t!("описание профиля занимает {n} байт из {max} — уменьшите число слоёв", n = n, max = REPORT_LEN))
             }
-            EncodeError::TooManyItems => write!(f, "в слое больше 255 зон или цветов"),
+            EncodeError::TooManyItems => write!(f, "{}", t!("в слое больше 255 зон или цветов")),
         }
     }
 }

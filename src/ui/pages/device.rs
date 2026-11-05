@@ -20,11 +20,11 @@ pub fn view(ctx: AppCtx) -> impl Widget {
     Column::new()
         .gap(18.0)
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .child(page_header("Устройство", "Аппаратные переключатели и сведения о ноутбуке."))
+        .child(page_header(t!("Устройство"), t!("Аппаратные переключатели и сведения о ноутбуке.")))
         .child(reactive_box(move || {
             let t = c_t.sink.toggles.get();
             if t.items.is_empty() {
-                return Box::new(card("Переключатели", "", Text::new("Драйвер ideapad_acpi не найден.").class("muted")));
+                return Box::new(card(t!("Переключатели"), "", Text::new(t!("Драйвер ideapad_acpi не найден.")).class("muted")));
             }
             let mut col = Column::new().gap(18.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             if t.items.iter().any(|i| !i.2) {
@@ -58,10 +58,10 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                         ),
                 );
             }
-            Box::new(col.child(card("Переключатели", "", rows)))
+            Box::new(col.child(card(t!("Переключатели"), "", rows)))
         }))
         .child(card(
-            "О системе",
+            t!("О системе"),
             "",
             reactive(move || {
                 let i = c_i.sink.info.get();
@@ -69,14 +69,14 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                 Column::new()
                     .gap(2.0)
                     .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .child(kv("Модель", format!("{} {}", i.vendor, i.model)))
-                    .child(kv("Машинный тип", i.machine_type.clone()))
+                    .child(kv(t!("Модель"), format!("{} {}", i.vendor, i.model)))
+                    .child(kv(t!("Машинный тип"), i.machine_type.clone()))
                     .child(kv("BIOS", format!("{} ({})", i.bios, i.bios_date)))
-                    .child(kv("Процессор", format!("{} · {} потоков", i.cpu, i.cpu_threads)))
-                    .child(kv("Видеокарта", if i.gpu.is_empty() { "—".into() } else { i.gpu.clone() }))
-                    .child(kv("Память", format!("{:.1} ГБ", i.memory_gb)))
-                    .child(kv("Контроллер подсветки", if rgb.name.is_empty() { "—".into() } else { rgb.name.clone() }))
-                    .child(kv("Система", format!("{} · ядро {}", i.os, i.kernel)))
+                    .child(kv(t!("Процессор"), t!("{cpu} · {cpu_threads} потоков", cpu = i.cpu, cpu_threads = i.cpu_threads)))
+                    .child(kv(t!("Видеокарта"), if i.gpu.is_empty() { "—".into() } else { i.gpu.clone() }))
+                    .child(kv(t!("Память"), t!("{memory_gb} ГБ", memory_gb = format!("{:.1}", i.memory_gb))))
+                    .child(kv(t!("Контроллер подсветки"), if rgb.name.is_empty() { "—".into() } else { rgb.name.clone() }))
+                    .child(kv(t!("Система"), t!("{os} · ядро {kernel}", os = i.os, kernel = i.kernel)))
             }),
         ))
         .class("page")

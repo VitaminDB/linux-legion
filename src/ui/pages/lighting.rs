@@ -61,21 +61,21 @@ pub fn view(ctx: AppCtx) -> impl Widget {
         .gap(18.0)
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .child(page_header(
-            "Подсветка",
-            "Legion Spectrum: клавиши, задние вентиляционные отверстия, боковины, передняя полоса и логотип.",
+            t!("Подсветка"),
+            t!("Legion Spectrum: клавиши, задние вентиляционные отверстия, боковины, передняя полоса и логотип."),
         ))
         .child(reactive_box(move || {
             let st = c.sink.rgb.get();
             match st.link {
                 RgbLink::Ready => Box::new(editor(c.clone())),
-                RgbLink::Searching => Box::new(message(icons::SEARCH, "Поиск контроллера подсветки…", "")),
+                RgbLink::Searching => Box::new(message(icons::SEARCH, &t!("Поиск контроллера подсветки…"), "")),
                 RgbLink::NotFound => Box::new(message(
                     icons::KEYBOARD,
-                    "Контроллер Spectrum не найден",
-                    "На этой модели нет RGB-подсветки Spectrum или её контроллер пока не поддерживается.",
+                    &t!("Контроллер Spectrum не найден"),
+                    &t!("На этой модели нет RGB-подсветки Spectrum или её контроллер пока не поддерживается."),
                 )),
                 RgbLink::NoAccess(_) => Box::new(access_banner()),
-                RgbLink::Error(e) => Box::new(message(icons::ERROR, "Ошибка связи с контроллером", &e)),
+                RgbLink::Error(e) => Box::new(message(icons::ERROR, &t!("Ошибка связи с контроллером"), &e)),
             }
         }))
         .class("page")
@@ -102,8 +102,8 @@ fn editor(ctx: AppCtx) -> impl Widget {
             Row::new()
                 .gap(18.0)
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .child(DecoratedBox::new().child(card("Профиль", "Fn + Пробел переключает профили с клавиатуры", profiles(ctx.clone()))).class("grow"))
-                .child(DecoratedBox::new().child(card("Яркость и логотип", "Fn + Пробел долгим нажатием — яркость", brightness(ctx.clone()))).class("grow")),
+                .child(DecoratedBox::new().child(card(t!("Профиль"), t!("Fn + Пробел переключает профили с клавиатуры"), profiles(ctx.clone()))).class("grow"))
+                .child(DecoratedBox::new().child(card(t!("Яркость и логотип"), t!("Fn + Пробел долгим нажатием — яркость"), brightness(ctx.clone()))).class("grow")),
         )
         .child(scheme_card(ctx.clone()))
         .child(
@@ -159,14 +159,14 @@ fn brightness(ctx: AppCtx) -> impl Widget {
                         })
                         .class("wide-slider grow"),
                 )
-                .child(Text::new(if cur == 0 { "выкл.".into() } else { format!("{cur} / {}", proto::MAX_BRIGHTNESS) }).class("field-value")),
+                .child(Text::new(if cur == 0 { t!("выкл.").into() } else { format!("{cur} / {}", proto::MAX_BRIGHTNESS) }).class("field-value")),
         );
         if has_logo {
             col = col.child(
                 Row::new()
                     .gap(12.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .child(Text::new("Логотип LEGION на крышке").class("row-title grow"))
+                    .child(Text::new(t!("Логотип LEGION на крышке")).class("row-title grow"))
                     .child(Toggle::new().on(st.logo).on_change(move |v| c_l.send(Job::RgbLogo(v)))),
             );
         }
@@ -181,10 +181,10 @@ fn scheme_card(ctx: AppCtx) -> impl Widget {
     let c_head = ctx.clone();
     card_with(
         icons::KEYBOARD,
-        "Схема подсветки",
+        t!("Схема подсветки"),
         move || {
             let n = c_head.rgb_sel.get().len();
-            Text::new(if n == 0 { "щёлкните по зонам, чтобы выделить".to_string() } else { format!("выделено зон: {n}") })
+            Text::new(if n == 0 { t!("щёлкните по зонам, чтобы выделить").to_string() } else { t!("выделено зон: {n}", n = n) })
                 .class("card-hint")
         },
         reactive(move || {
@@ -217,7 +217,7 @@ fn presets(ctx: AppCtx, zones: Vec<Zone>) -> impl Widget {
     }
     let c = ctx.clone();
     row.child(DecoratedBox::new().class("grow")).child(
-        Button::new("Снять выделение").icon(icons::DESELECT).on_click(move || c.rgb_sel.set(Vec::new())).class("chip"),
+        Button::new(t!("Снять выделение")).icon(icons::DESELECT).on_click(move || c.rgb_sel.set(Vec::new())).class("chip"),
     )
 }
 
@@ -295,9 +295,9 @@ fn keyboard(ctx: AppCtx, zones: Vec<Zone>) -> impl Widget {
     col.child(body).child(
         Row::new()
             .gap(18.0)
-            .child(legend("zone-case-sample", "зоны корпуса"))
-            .child(legend("zone-on-sample", "выделено"))
-            .child(Text::new("Цвета — живой кадр с контроллера").class("scale-label")),
+            .child(legend("zone-case-sample", &t!("зоны корпуса")))
+            .child(legend("zone-on-sample", &t!("выделено")))
+            .child(Text::new(t!("Цвета — живой кадр с контроллера")).class("scale-label")),
     )
 }
 
@@ -332,7 +332,7 @@ fn logo_chip(ctx: AppCtx, code: u16) -> impl Widget {
                         .gap(10.0)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .child(DecoratedBox::new().class("logo-dot").style("background-color", color(col)))
-                        .child(Text::new("LEGION · логотип на крышке").class("logo-text")),
+                        .child(Text::new(t!("LEGION · логотип на крышке")).class("logo-text")),
                 )
                 .class(if on { "logo-chip logo-chip-on" } else { "logo-chip" })
         }))
@@ -368,9 +368,9 @@ fn boost(c: Rgb, brightness: u8) -> Rgb {
 // слои
 
 fn layer_subtitle(e: &Effect) -> String {
-    let zones = if e.kind.is_all_zones() { "все зоны".to_string() } else { format!("зон: {}", e.keys.len()) };
+    let zones = if e.kind.is_all_zones() { t!("все зоны").to_string() } else { t!("зон: {n}", n = e.keys.len()) };
     if e.kind.has_speed() {
-        format!("{zones} · скорость {}", e.speed)
+        t!("{zones} · скорость {speed}", zones = zones, speed = e.speed)
     } else {
         zones
     }
@@ -379,22 +379,22 @@ fn layer_subtitle(e: &Effect) -> String {
 /// Почему слой пропадёт при записи.
 fn hidden_reason(effects: &[Effect], i: usize) -> String {
     if let Some(top) = effects[i + 1..].iter().find(|e| e.kind.is_all_zones()) {
-        return format!("Не запишется: «{}» выше занимает все зоны", top.kind.label());
+        return t!("Не запишется: «{label}» выше занимает все зоны", label = top.kind.label());
     }
     if effects[i].kind.is_whole_keyboard() {
-        return "Не запишется: реагирует на нажатия и не допускает перекрытия сверху".into();
+        return t!("Не запишется: реагирует на нажатия и не допускает перекрытия сверху").into();
     }
-    "Не запишется: все зоны закрыты слоями выше".into()
+    t!("Не запишется: все зоны закрыты слоями выше").into()
 }
 
 fn layers_card(ctx: AppCtx) -> impl Widget {
     let c_head = ctx.clone();
     card_with(
         icons::LAYERS,
-        "Слои эффектов",
+        t!("Слои эффектов"),
         move || {
             let p = c_head.sink.rgb.get().profile;
-            Text::new(format!("профиль {p}")).class("card-hint")
+            Text::new(t!("профиль {p}", p = p)).class("card-hint")
         },
         reactive(move || {
             let effects = ctx.rgb_edit.get();
@@ -404,7 +404,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
             let alive = proto::survivors(&effects);
             let mut col = Column::new().gap(8.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             if effects.is_empty() {
-                col = col.child(Text::new("В профиле нет эффектов — подсветка погашена.").class("muted"));
+                col = col.child(Text::new(t!("В профиле нет эффектов — подсветка погашена.")).class("muted"));
             }
             // Верхний (последний) слой — первым в списке.
             for i in (0..n).rev() {
@@ -437,11 +437,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                                                     Some(_) if e.kind.is_all_zones() => {
                                                         Text::new(layer_subtitle(e)).class("row-desc")
                                                     }
-                                                    Some(k) if k.len() < e.keys.len() => Text::new(format!(
-                                                        "{} · видно {} — остальные закрыты слоями выше",
-                                                        layer_subtitle(e),
-                                                        k.len()
-                                                    ))
+                                                    Some(k) if k.len() < e.keys.len() => Text::new(t!("{desc} · видно {n} — остальные закрыты слоями выше", desc = layer_subtitle(e), n = k.len()))
                                                     .class("row-desc"),
                                                     Some(_) => Text::new(layer_subtitle(e)).class("row-desc"),
                                                     None => Text::new(hidden_reason(&effects, i)).class("row-warn"),
@@ -451,7 +447,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                                         .child(dots)
                                         .child(
                                             ToolButton::new(icons::UP)
-                                                .tooltip("Выше")
+                                                .tooltip(t!("Выше"))
                                                 .disabled(i + 1 >= n)
                                                 .on_click(move || {
                                                     c_up.edit_rgb(|v| v.swap(i, i + 1));
@@ -460,14 +456,14 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                                         )
                                         .child(
                                             ToolButton::new(icons::DOWN)
-                                                .tooltip("Ниже")
+                                                .tooltip(t!("Ниже"))
                                                 .disabled(i == 0)
                                                 .on_click(move || {
                                                     c_dn.edit_rgb(|v| v.swap(i, i - 1));
                                                     c_dn.rgb_layer.set(Some(i - 1));
                                                 }),
                                         )
-                                        .child(ToolButton::new(icons::DELETE).tooltip("Удалить слой").on_click(move || {
+                                        .child(ToolButton::new(icons::DELETE).tooltip(t!("Удалить слой")).on_click(move || {
                                             c_del.edit_rgb(|v| {
                                                 v.remove(i);
                                             });
@@ -489,7 +485,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                 Row::new()
                     .gap(8.0)
                     .child(
-                        Button::new("Новый слой")
+                        Button::new(t!("Новый слой"))
                             .icon(icons::ADD)
                             .on_click(move || {
                                 let mut keys = c_add.rgb_sel.get_untracked();
@@ -504,7 +500,7 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
                             .class("btn-primary grow"),
                     )
                     .child(
-                        Button::new("Эффект на всё")
+                        Button::new(t!("Эффект на всё"))
                             .icon(icons::SELECT_ALL)
                             .on_click(move || {
                                 let zones = layout::build(&c_all.sink.rgb.get_untracked().matrix);
@@ -517,10 +513,10 @@ fn layers_card(ctx: AppCtx) -> impl Widget {
             )
             .child(
                 Text::new(if sel_empty {
-                    "Ничего не выделено — новый слой ляжет на все зоны и закроет слои ниже. \
-                     Чтобы покрасить часть клавиш, сначала выделите их на схеме."
+                    t!("Ничего не выделено — новый слой ляжет на все зоны и закроет слои ниже. \
+                     Чтобы покрасить часть клавиш, сначала выделите их на схеме.")
                 } else {
-                    "Новый слой ляжет на выделенные зоны."
+                    t!("Новый слой ляжет на выделенные зоны.")
                 })
                 .class("row-desc"),
             )
@@ -533,9 +529,9 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
         let effects = ctx.rgb_edit.get();
         let Some(i) = ctx.rgb_layer.get().filter(|&i| i < effects.len()) else {
             return Box::new(card(
-                "Параметры слоя",
+                t!("Параметры слоя"),
                 "",
-                Text::new("Выберите слой слева или нажмите «Новый слой» — он ляжет на выделенные зоны или, если ничего не выделено, на все.")
+                Text::new(t!("Выберите слой слева или нажмите «Новый слой» — он ляжет на выделенные зоны или, если ничего не выделено, на все."))
                     .class("muted"),
             ));
         };
@@ -545,8 +541,8 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
         if e.kind.has_speed() {
             let c = ctx.clone();
             col = col.child(field(
-                "Скорость",
-                SegmentedButton::new(vec![Segment::new("Медленно"), Segment::new("Средне"), Segment::new("Быстро")])
+                &t!("Скорость"),
+                SegmentedButton::new(vec![Segment::new(t!("Медленно")), Segment::new(t!("Средне")), Segment::new(t!("Быстро"))])
                     .selected(e.speed.clamp(1, 3) as usize - 1)
                     .on_change(move |s| set_layer(&c, i, |e| e.speed = s as u8 + 1))
                     .class("seg"),
@@ -555,7 +551,7 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
         if e.kind.has_direction() {
             let c = ctx.clone();
             col = col.child(field(
-                "Направление",
+                &t!("Направление"),
                 SegmentedButton::new(Direction::ALL.iter().map(|d| Segment::new(d.label())).collect())
                     .selected(Direction::ALL.iter().position(|d| *d == e.direction).unwrap_or(0))
                     .on_change(move |s| set_layer(&c, i, |e| e.direction = Direction::ALL[s]))
@@ -565,8 +561,8 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
         if e.kind.has_rotation() {
             let c = ctx.clone();
             col = col.child(field(
-                "Вращение",
-                SegmentedButton::new(vec![Segment::new("По часовой"), Segment::new("Против часовой")])
+                &t!("Вращение"),
+                SegmentedButton::new(vec![Segment::new(t!("По часовой")), Segment::new(t!("Против часовой"))])
                     .selected(if e.rotation == Rotation::CounterClockwise { 1 } else { 0 })
                     .on_change(move |s| {
                         set_layer(&c, i, |e| e.rotation = if s == 1 { Rotation::CounterClockwise } else { Rotation::Clockwise })
@@ -580,7 +576,7 @@ fn layer_editor(ctx: AppCtx) -> impl Widget {
             ColorKind::None => {}
         }
         col = col.child(zones_field(ctx.clone(), i, &e));
-        Box::new(card("Параметры слоя", "", col))
+        Box::new(card(t!("Параметры слоя"), "", col))
     })
 }
 
@@ -631,7 +627,7 @@ fn effect_grid(ctx: AppCtx, i: usize, cur: EffectType) -> impl Widget {
                 ),
         );
     }
-    field("Эффект", grid)
+    field(&t!("Эффект"), grid)
 }
 
 fn swatch(c: Rgb, on: bool) -> impl Widget {
@@ -658,13 +654,13 @@ fn single_color(ctx: AppCtx, i: usize, cur: Rgb) -> impl Widget {
             .width(150.0)
             .on_change(move |v| set_layer(&c, i, |e| e.colors = vec![Rgb::new(v.r, v.g, v.b)])),
     );
-    field(&format!("Цвет · {}", cur.to_hex()), row)
+    field(&t!("Цвет · {to_hex}", to_hex = cur.to_hex()), row)
 }
 
 fn multi_color(ctx: AppCtx, i: usize, colors: Vec<Rgb>) -> impl Widget {
     let mut chosen = Row::new().gap(8.0).cross_axis_alignment(CrossAxisAlignment::Center);
     if colors.is_empty() {
-        chosen = chosen.child(Text::new("Случайные цвета").class("muted"));
+        chosen = chosen.child(Text::new(t!("Случайные цвета")).class("muted"));
     }
     for (k, c) in colors.iter().enumerate() {
         let cx = ctx.clone();
@@ -676,7 +672,7 @@ fn multi_color(ctx: AppCtx, i: usize, colors: Vec<Rgb>) -> impl Widget {
                     }))
                     .cursor(CursorIcon::Pointer)
                     .child(swatch(*c, true)),
-                "Убрать цвет",
+                t!("Убрать цвет"),
             ),
         );
     }
@@ -708,7 +704,7 @@ fn multi_color(ctx: AppCtx, i: usize, colors: Vec<Rgb>) -> impl Widget {
     );
     let c = ctx.clone();
     field(
-        "Цвета — щелчок по цвету в палитре добавляет его, по выбранному — убирает",
+        &t!("Цвета — щелчок по цвету в палитре добавляет его, по выбранному — убирает"),
         Column::new()
             .gap(10.0)
             .child(
@@ -716,7 +712,7 @@ fn multi_color(ctx: AppCtx, i: usize, colors: Vec<Rgb>) -> impl Widget {
                     .gap(10.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .child(chosen)
-                    .child(Button::new("Случайные").on_click(move || set_layer(&c, i, |e| e.colors.clear())).class("chip")),
+                    .child(Button::new(t!("Случайные")).on_click(move || set_layer(&c, i, |e| e.colors.clear())).class("chip")),
             )
             .child(palette),
     )
@@ -724,26 +720,26 @@ fn multi_color(ctx: AppCtx, i: usize, colors: Vec<Rgb>) -> impl Widget {
 
 fn zones_field(ctx: AppCtx, i: usize, e: &Effect) -> Box<dyn Widget> {
     if e.kind.is_all_zones() {
-        return Box::new(field("Зоны", Text::new("Этот эффект всегда охватывает все зоны и отменяет остальные слои.").class("muted")));
+        return Box::new(field(&t!("Зоны"), Text::new(t!("Этот эффект всегда охватывает все зоны и отменяет остальные слои.")).class("muted")));
     }
     let n = e.keys.len();
     let sel_n = ctx.rgb_sel.get().len();
     let keys = e.keys.clone();
     let (c_set, c_show) = (ctx.clone(), ctx);
     let whole = if e.kind.is_whole_keyboard() {
-        "Реагирует на нажатия: если зоны слоя перекрыты сверху, слой будет пропущен."
+        t!("Реагирует на нажатия: если зоны слоя перекрыты сверху, слой будет пропущен.")
     } else {
-        ""
+        String::new()
     };
     Box::new(field(
-        &format!("Зоны · {n}"),
+        &t!("Зоны · {n}", n = n),
         Column::new()
             .gap(8.0)
             .child(
                 Row::new()
                     .gap(8.0)
                     .child(
-                        Button::new(format!("Назначить выделенные ({sel_n})"))
+                        Button::new(t!("Назначить выделенные ({sel_n})", sel_n = sel_n))
                             .icon(icons::EDIT)
                             .disabled(sel_n == 0)
                             .on_click(move || {
@@ -753,7 +749,7 @@ fn zones_field(ctx: AppCtx, i: usize, e: &Effect) -> Box<dyn Widget> {
                             .class("btn-ghost"),
                     )
                     .child(
-                        Button::new("Выделить зоны слоя")
+                        Button::new(t!("Выделить зоны слоя"))
                             .icon(icons::SELECT_ALL)
                             .on_click(move || {
                                 let mut k = keys.clone();
@@ -794,9 +790,7 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .child(Icon::new(icons::WARNING).class("status-icon tone-warn"))
                     .child(
-                        Text::new(format!(
-                            "Слоёв, полностью закрытых верхними: {hidden} — при записи они пропадут"
-                        ))
+                        Text::new(t!("Слоёв, полностью закрытых верхними: {hidden} — при записи они пропадут", hidden = hidden))
                         .class("status-text"),
                     ),
             ),
@@ -805,14 +799,14 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
                     .gap(8.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .child(DecoratedBox::new().class("dot dot-warn"))
-                    .child(Text::new(format!("Изменения ещё не записаны в профиль {profile}")).class("status-text")),
+                    .child(Text::new(t!("Изменения ещё не записаны в профиль {profile}", profile = profile)).class("status-text")),
             ),
             (None, false) => Box::new(
                 Row::new()
                     .gap(8.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .child(Icon::new(icons::CHECK).class("status-icon tone-ok"))
-                    .child(Text::new(format!("Профиль {profile} хранится в памяти клавиатуры")).class("status-text")),
+                    .child(Text::new(t!("Профиль {profile} хранится в памяти клавиатуры", profile = profile)).class("status-text")),
             ),
         };
         DecoratedBox::new()
@@ -823,14 +817,14 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
                     .children(vec![status])
                     .child(DecoratedBox::new().class("grow"))
                     .child(
-                        Button::new("Заводской профиль")
+                        Button::new(t!("Заводской профиль"))
                             .icon(icons::RESTART)
                             .disabled(busy)
                             .on_click(move || c_reset.send(Job::RgbReset(c_reset.sink.rgb.get_untracked().profile)))
                             .class("btn-ghost"),
                     )
                     .child(
-                        Button::new("Отменить")
+                        Button::new(t!("Отменить"))
                             .icon(icons::UNDO)
                             .disabled(!dirty || busy)
                             .on_click(move || {
@@ -841,7 +835,7 @@ fn save_bar(ctx: AppCtx) -> impl Widget {
                             .class("btn-ghost"),
                     )
                     .child(
-                        Button::new(format!("Записать в профиль {profile}"))
+                        Button::new(t!("Записать в профиль {profile}", profile = profile))
                             .icon(icons::SAVE)
                             .disabled(!dirty || busy || size_err.is_some())
                             .on_click(move || {

@@ -6,16 +6,17 @@ use syngui::widgets::*;
 use syngui::StyleValue;
 
 /// Заголовок страницы.
-pub fn page_header(title: &str, subtitle: &str) -> impl Widget {
+pub fn page_header(title: impl Into<String>, subtitle: impl Into<String>) -> impl Widget {
     Column::new()
         .gap(4.0)
-        .child(Text::new(title).class("page-title"))
-        .child(Text::new(subtitle).class("page-sub"))
+        .child(Text::new(title.into()).class("page-title"))
+        .child(Text::new(subtitle.into()).class("page-sub"))
 }
 
 /// Карточка-секция с заголовком.
-pub fn card<M>(title: &str, hint: &str, body: impl IntoWidget<M>) -> impl Widget {
-    let mut head = Column::new().gap(3.0).child(Text::new(title).class("card-title"));
+pub fn card<M>(title: impl Into<String>, hint: impl Into<String>, body: impl IntoWidget<M>) -> impl Widget {
+    let hint = hint.into();
+    let mut head = Column::new().gap(3.0).child(Text::new(title.into()).class("card-title"));
     if !hint.is_empty() {
         head = head.child(Text::new(hint).class("card-hint"));
     }
@@ -31,7 +32,7 @@ pub fn card<M>(title: &str, hint: &str, body: impl IntoWidget<M>) -> impl Widget
 }
 
 /// Карточка с иконкой в заголовке и произвольным правым краем.
-pub fn card_with<M, N>(icon: &str, title: &str, trailing: impl IntoWidget<N>, body: impl IntoWidget<M>) -> impl Widget {
+pub fn card_with<M, N>(icon: &str, title: impl Into<String>, trailing: impl IntoWidget<N>, body: impl IntoWidget<M>) -> impl Widget {
     DecoratedBox::new()
         .child(
             Column::new()
@@ -42,7 +43,7 @@ pub fn card_with<M, N>(icon: &str, title: &str, trailing: impl IntoWidget<N>, bo
                         .gap(10.0)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .child(Icon::new(icon).class("card-icon"))
-                        .child(Text::new(title).class("card-title"))
+                        .child(Text::new(title.into()).class("card-title"))
                         .child(DecoratedBox::new().class("grow"))
                         .child(trailing),
                 )
@@ -52,34 +53,34 @@ pub fn card_with<M, N>(icon: &str, title: &str, trailing: impl IntoWidget<N>, bo
 }
 
 /// Строка «название + пояснение … контрол».
-pub fn setting_row(title: &str, desc: &str, control: Box<dyn Widget>) -> impl Widget {
+pub fn setting_row(title: impl Into<String>, desc: impl Into<String>, control: Box<dyn Widget>) -> impl Widget {
     Row::new()
         .gap(16.0)
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .child(
             Column::new()
                 .gap(3.0)
-                .child(Text::new(title).class("row-title"))
-                .child(Text::new(desc).class("row-desc"))
+                .child(Text::new(title.into()).class("row-title"))
+                .child(Text::new(desc.into()).class("row-desc"))
                 .class("grow"),
         )
         .children(vec![control])
 }
 
 /// Подпись над контролом со значением справа.
-pub fn labeled(label: &str, value: String) -> impl Widget {
+pub fn labeled(label: impl Into<String>, value: String) -> impl Widget {
     Row::new()
         .gap(8.0)
-        .child(Text::new(label).class("field-label"))
+        .child(Text::new(label.into()).class("field-label"))
         .child(DecoratedBox::new().class("grow"))
         .child(Text::new(value).class("field-value"))
 }
 
 /// Пара «ключ — значение» для таблиц сведений.
-pub fn kv(key: &str, value: impl Into<String>) -> impl Widget {
+pub fn kv(key: impl Into<String>, value: impl Into<String>) -> impl Widget {
     Row::new()
         .gap(12.0)
-        .child(Text::new(key).class("kv-key"))
+        .child(Text::new(key.into()).class("kv-key"))
         .child(DecoratedBox::new().class("grow"))
         .child(Text::new(value.into()).selectable(true).class("kv-value"))
         .class("kv-row")
@@ -109,11 +110,11 @@ pub fn access_banner() -> impl Widget {
                 .child(
                     Column::new()
                         .gap(6.0)
-                        .child(Text::new("Нет прав на изменение настроек").class("row-title"))
+                        .child(Text::new(t!("Нет прав на изменение настроек")).class("row-title"))
                         .child(
                             Text::new(
-                                "Установите udev-правило из пакета — оно даёт группе wheel доступ к режимам \
-                                 питания, вентиляторам и подсветке:",
+                                t!("Установите udev-правило из пакета — оно даёт группе wheel доступ к режимам \
+                                 питания, вентиляторам и подсветке:"),
                             )
                             .class("row-desc"),
                         )
@@ -136,7 +137,8 @@ pub fn access_banner() -> impl Widget {
 }
 
 /// Кольцевой индикатор: дуга 270° с подписью в центре.
-pub fn ring(frac: f32, color: Color, size: f32, value: String, caption: &str) -> impl Widget {
+pub fn ring(frac: f32, color: Color, size: f32, value: String, caption: impl Into<String>) -> impl Widget {
+    let caption = caption.into();
     let frac = frac.clamp(0.0, 1.0);
     let canvas = Canvas::new(move |c: &mut CanvasContext, _| {
         let s = c.width().min(c.height());

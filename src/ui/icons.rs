@@ -56,3 +56,4 @@ pub const FX_RIPPLE: &str = "\u{e3ea}"; // grain
 pub const FX_TYPE: &str = "\u{e913}"; // touch_app
 pub const FX_AUDIO: &str = "\u{e1b8}"; // graphic_eq
 pub const FX_AUDIO_RIPPLE: &str = "\u{e405}"; // music_note
+pub const TRANSLATE: &str = "\u{e8e2}";

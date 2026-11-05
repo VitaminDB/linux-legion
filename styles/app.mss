@@ -511,3 +511,15 @@ Tooltip { background: #2a303c; color: var(--text); font-size: 12px; border-radiu
 .status-icon { icon-size: 18px; }
 
 CircularProgress { color: var(--accent); accent-color: var(--accent); track-color: #2a2f3b; }
+
+/* выбор языка в шапке — в тон «пилюлям» */
+Dropdown {
+    background: var(--surface-2);
+    color: var(--text-2);
+    accent-color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font-size: 13px;
+    height: 34px;
+    &:hover { border-color: var(--border-strong); }
+}

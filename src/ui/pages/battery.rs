@@ -21,15 +21,15 @@ pub fn view(ctx: AppCtx) -> impl Widget {
     Column::new()
         .gap(18.0)
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .child(page_header("Батарея", "Режим зарядки и здоровье аккумулятора."))
+        .child(page_header(t!("Батарея"), t!("Режим зарядки и здоровье аккумулятора.")))
         .child(reactive_box(move || {
             let Some(b) = ctx.sink.battery.get() else {
-                return Box::new(Text::new("Батарея не найдена.").class("muted"));
+                return Box::new(Text::new(t!("Батарея не найдена.")).class("muted"));
             };
             let health = b.health();
             let time = match (b.status, b.minutes_left()) {
-                (Status::Discharging, Some(m)) => format!("{} ч {:02} мин до разряда", m / 60, m % 60),
-                (Status::Charging, Some(m)) => format!("{} ч {:02} мин до полного заряда", m / 60, m % 60),
+                (Status::Discharging, Some(m)) => t!("{h} ч {m} мин до разряда", h = m / 60, m = format!("{:02}", m % 60)),
+                (Status::Charging, Some(m)) => t!("{h} ч {m} мин до полного заряда", h = m / 60, m = format!("{:02}", m % 60)),
                 _ => String::new(),
             };
             let pct_color = match b.percent {
@@ -52,17 +52,17 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                                 .cross_axis_alignment(CrossAxisAlignment::Center)
                                 .child(Icon::new(if b.ac_online { icons::PLUG } else { icons::BATTERY_FULL }).class("card-icon"))
                                 .child(
-                                    Text::new(if b.ac_online { "Подключено к сети" } else { "Работа от батареи" })
+                                    Text::new(if b.ac_online { t!("Подключено к сети") } else { t!("Работа от батареи") })
                                         .class("big-line"),
                                 ),
                         )
                         .child(if time.is_empty() { nothing() } else { Box::new(Text::new(time).class("row-desc")) })
                         .child(kv(
-                            if b.status == Status::Charging { "Мощность заряда" } else { "Потребление" },
-                            if b.power_w > 0.1 { format!("{:.1} Вт", b.power_w) } else { "—".into() },
+                            if b.status == Status::Charging { t!("Мощность заряда") } else { t!("Потребление") },
+                            if b.power_w > 0.1 { t!("{power_w} Вт", power_w = format!("{:.1}", b.power_w)) } else { "—".into() },
                         ))
-                        .child(kv("Запас энергии", format!("{:.1} из {:.1} Вт·ч", b.energy_now_wh, b.energy_full_wh)))
-                        .child(kv("Напряжение", format!("{:.2} В", b.voltage_v)))
+                        .child(kv(t!("Запас энергии"), t!("{energy_now_wh} из {energy_full_wh} Вт·ч", energy_now_wh = format!("{:.1}", b.energy_now_wh), energy_full_wh = format!("{:.1}", b.energy_full_wh))))
+                        .child(kv(t!("Напряжение"), t!("{voltage_v} В", voltage_v = format!("{:.2}", b.voltage_v))))
                         .class("grow"),
                 );
 
@@ -100,9 +100,9 @@ pub fn view(ctx: AppCtx) -> impl Widget {
             if !b.charge_types.is_empty() && !b.charge_type_writable {
                 col = col.child(access_banner());
             }
-            col = col.child(card("Состояние", "", status));
+            col = col.child(card(t!("Состояние"), "", status));
             if !b.charge_types.is_empty() {
-                col = col.child(card("Режим зарядки", "Как в Vantage: быстрая зарядка или сбережение аккумулятора.", modes));
+                col = col.child(card(t!("Режим зарядки"), t!("Как в Vantage: быстрая зарядка или сбережение аккумулятора."), modes));
             }
 
             let mut health_col = Column::new().gap(10.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
@@ -111,18 +111,18 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                     .child(
                         Row::new()
                             .gap(8.0)
-                            .child(Text::new("Остаток ёмкости").class("stat-label"))
+                            .child(Text::new(t!("Остаток ёмкости")).class("stat-label"))
                             .child(DecoratedBox::new().class("grow"))
                             .child(Text::new(format!("{h:.0} %")).class("stat-value")),
                     )
                     .child(bar(h / 100.0, if h > 80.0 { "ok" } else if h > 60.0 { "warn" } else { "bad" }));
             }
             health_col = health_col
-                .child(kv("Ёмкость сейчас", format!("{:.1} Вт·ч", b.energy_full_wh)))
-                .child(kv("Ёмкость новой батареи", format!("{:.1} Вт·ч", b.energy_design_wh)))
-                .child(kv("Циклов заряда", b.cycles.map_or("—".into(), |c| c.to_string())))
-                .child(kv("Модель", format!("{} {}", b.manufacturer, b.model).trim().to_string()));
-            col = col.child(card("Здоровье аккумулятора", "", health_col));
+                .child(kv(t!("Ёмкость сейчас"), t!("{energy_full_wh} Вт·ч", energy_full_wh = format!("{:.1}", b.energy_full_wh))))
+                .child(kv(t!("Ёмкость новой батареи"), t!("{energy_design_wh} Вт·ч", energy_design_wh = format!("{:.1}", b.energy_design_wh))))
+                .child(kv(t!("Циклов заряда"), b.cycles.map_or("—".into(), |c| c.to_string())))
+                .child(kv(t!("Модель"), format!("{} {}", b.manufacturer, b.model).trim().to_string()));
+            col = col.child(card(t!("Здоровье аккумулятора"), "", health_col));
             Box::new(col)
         }))
         .class("page")

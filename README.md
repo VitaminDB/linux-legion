@@ -49,6 +49,9 @@ service keeps the CPU power limits and fans in line with the selected mode).
   Profiles are stored in the keyboard itself.
 - **Battery** — charging mode (Standard / Rapid charge / Conservation ≈80 %), charge and health.
 - **Device** — Fn Lock, camera kill switch, always-on USB charging, system information.
+- **14 languages** — English, Русский, Українська, Қазақша, Deutsch, Français, Español, Italiano,
+  Português (Brasil), Polski, Türkçe, 简体中文, 日本語, 한국어. The language follows the system
+  (`LANG`) and can be switched live from the window header; the choice is remembered.
 
 ## Supported hardware
 
@@ -92,6 +95,8 @@ linux_legion --apply         # apply saved Custom-mode limits and fans once
 linux_legion --daemon        # the auto-apply service (linux-legion-autoapply.service)
 linux_legion --simulate      # demo mode with a simulated Legion Pro 7
 linux_legion --page 2        # open a page (0 home … 4 device)
+linux_legion --screenshot out.png  # render the window to a PNG without showing it
+LEGION_LANG=de linux_legion  # interface language (overrides the choice in the header)
 LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
 ```
 
@@ -175,8 +180,14 @@ src/spectrum/   RGB protocol, hidraw transport, simulator, physical keyboard lay
 src/worker.rs   background thread: polling and hardware commands
 src/ui/         the window: home, performance, lighting, battery, device pages
 src/autoapply.rs  the service: Custom-mode auto-apply, per-mode RAPL/EPP, software fan curve
+src/i18n.rs     interface language; translations in i18n/<lang>.lang
 packaging/      udev rule, systemd user unit, .desktop entry, PKGBUILD
 ```
+
+UI strings are written in Russian and wrapped in syngui's `t!("…")`; the catalogs `i18n/*.lang`
+map each source string to its translation (`"Батарея" = "Battery"`). After changing strings run
+`syngui/scripts/i18n-extract.py i18n/<lang>.lang src` for each catalog — new strings are added
+empty, removed ones dropped; `cargo test` fails while any catalog has untranslated strings.
 
 `cargo test` runs the unit tests (including packets captured from a live keyboard).
 `cargo test -- --ignored live_` writes test layers to an inactive profile of the real keyboard,

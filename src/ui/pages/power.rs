@@ -19,8 +19,8 @@ pub fn view(ctx: AppCtx) -> impl Widget {
         .gap(18.0)
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .child(page_header(
-            "Производительность",
-            "Режим питания меняет лимиты мощности и работу вентиляторов. На клавиатуре — Fn+Q.",
+            t!("Производительность"),
+            t!("Режим питания меняет лимиты мощности и работу вентиляторов. На клавиатуре — Fn+Q."),
         ))
         .child(reactive_box(move || {
             let st = c.sink.power.get();
@@ -30,7 +30,7 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                 crate::ui::widgets::nothing()
             }
         }))
-        .child(card("Режим питания", "", modes(ctx.clone())))
+        .child(card(t!("Режим питания"), "", modes(ctx.clone())))
         .child(custom_notice(ctx.clone()))
         .child(tunables(ctx.clone()))
         .child(cpu(ctx.clone()))
@@ -92,13 +92,13 @@ fn custom_notice(ctx: AppCtx) -> impl Widget {
                         .child(Icon::new(icons::INFO).class("banner-icon-info"))
                         .child(
                             Text::new(
-                                "Лимиты мощности и обороты вентиляторов прошивка разрешает менять только в режиме «Свой». \
-                                 В остальных режимах они показаны для справки.",
+                                t!("Лимиты мощности и обороты вентиляторов прошивка разрешает менять только в режиме «Свой». \
+                                 В остальных режимах они показаны для справки."),
                             )
                             .class("row-desc grow"),
                         )
                         .child(
-                            Button::new("Включить «Свой»")
+                            Button::new(t!("Включить «Свой»"))
                                 .icon(icons::MODE_CUSTOM)
                                 .on_click(move || c.send(Job::SetPowerMode(PowerMode::Custom)))
                                 .class("btn-primary"),
@@ -118,7 +118,7 @@ fn tunables(ctx: AppCtx) -> impl Widget {
         Row::new()
             .gap(8.0)
             .child(
-                Button::new("Максимум")
+                Button::new(t!("Максимум"))
                     .icon(icons::BOLT)
                     .disabled(!custom)
                     .on_click(move || {
@@ -128,7 +128,7 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                     .class("btn-ghost"),
             )
             .child(
-                Button::new("По умолчанию")
+                Button::new(t!("По умолчанию"))
                     .icon(icons::RESTART)
                     .disabled(!custom)
                     .on_click(move || {
@@ -144,7 +144,7 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                     .class("btn-ghost"),
             )
             .child(
-                Button::new("Применить")
+                Button::new(t!("Применить"))
                     .icon(icons::CHECK)
                     .disabled(!custom || !dirty)
                     .on_click(move || {
@@ -158,13 +158,13 @@ fn tunables(ctx: AppCtx) -> impl Widget {
     };
     card_with(
         icons::BOLT,
-        "Лимиты мощности",
+        t!("Лимиты мощности"),
         actions,
         reactive_box(move || {
             let list = ctx.sink.tunables.get();
             if list.is_empty() {
                 return Box::new(
-                    Text::new("Драйвер lenovo-wmi-other не отдаёт настраиваемых лимитов на этой модели.").class("muted"),
+                    Text::new(t!("Драйвер lenovo-wmi-other не отдаёт настраиваемых лимитов на этой модели.")).class("muted"),
                 );
             }
             let custom = ctx.power_mode() == Some(PowerMode::Custom);
@@ -175,12 +175,12 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                 let changed = v != t.value;
                 let c = ctx.clone();
                 let name = t.name.clone();
-                let value = if changed { format!("{} → {v} {}", t.value, t.unit) } else { format!("{v} {}", t.unit) };
+                let value = if changed { format!("{} → {v} {}", t.value, t!(t.unit)) } else { format!("{v} {}", t!(t.unit)) };
                 col = col.child(
                     Column::new()
                         .gap(8.0)
                         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                        .child(labeled(&t.label, value))
+                        .child(labeled(t!(&t.label), value))
                         .child(
                             Slider::new()
                                 .value(v as f32)
@@ -198,8 +198,8 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                         .child(
                             Row::new()
                                 .gap(8.0)
-                                .child(Text::new(t.hint.clone()).class("row-desc grow"))
-                                .child(Text::new(format!("{}–{} {}", t.min, t.max, t.unit)).class("scale-label")),
+                                .child(Text::new(t!(&t.hint)).class("row-desc grow"))
+                                .child(Text::new(format!("{}–{} {}", t.min, t.max, t!(t.unit))).class("scale-label")),
                         ),
                 );
             }
@@ -217,7 +217,7 @@ fn fans(ctx: AppCtx) -> impl Widget {
         Row::new()
             .gap(8.0)
             .child(
-                Button::new("Все — авто")
+                Button::new(t!("Все — авто"))
                     .icon(icons::AUTO)
                     .disabled(!custom)
                     .on_click(move || {
@@ -227,7 +227,7 @@ fn fans(ctx: AppCtx) -> impl Widget {
                     .class("btn-ghost"),
             )
             .child(
-                Button::new("Применить")
+                Button::new(t!("Применить"))
                     .icon(icons::CHECK)
                     .disabled(!custom || !dirty)
                     .on_click(move || {
@@ -241,12 +241,12 @@ fn fans(ctx: AppCtx) -> impl Widget {
     };
     card_with(
         icons::FAN,
-        "Вентиляторы",
+        t!("Вентиляторы"),
         actions,
         reactive_box(move || {
             let list = ctx.sink.fans.get();
             if list.is_empty() {
-                return Box::new(Text::new("Вентиляторы не найдены (нужен драйвер lenovo-wmi-other).").class("muted"));
+                return Box::new(Text::new(t!("Вентиляторы не найдены (нужен драйвер lenovo-wmi-other).")).class("muted"));
             }
             let custom = ctx.power_mode() == Some(PowerMode::Custom);
             let edit = ctx.fan_edit.get();
@@ -254,18 +254,18 @@ fn fans(ctx: AppCtx) -> impl Widget {
             let mut col = Column::new().gap(22.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             let c = ctx.clone();
             let desc = if saved.fan_curve && !(svc.enabled && svc.active) {
-                "Включено, но служба не запущена — включите её в разделе «Служба» ниже."
+                t!("Включено, но служба не запущена — включите её в разделе «Служба» ниже.")
             } else if saved.fan_curve {
-                "Служба ведёт вентиляторы по температуре CPU и видеокарты во всех режимах; \
-                 в «Свой» заданные здесь обороты держатся как есть (выше 95 °C — не ниже кривой)."
+                t!("Служба ведёт вентиляторы по температуре CPU и видеокарты во всех режимах; \
+                 в «Свой» заданные здесь обороты держатся как есть (выше 95 °C — не ниже кривой).")
             } else {
-                "EC Legion Pro 7 Gen 10 после ручного задания оборотов не возвращается к своей кривой: \
+                t!("EC Legion Pro 7 Gen 10 после ручного задания оборотов не возвращается к своей кривой: \
                  ни по «авто», ни по смене режима, ни после сна и перезагрузки — только после сброса EC \
                  (выключить, отсоединить питание, подержать кнопку питания 30 с). Если вы задавали \
-                 обороты вручную — включите, и вентиляторы снова будут следовать температуре."
+                 обороты вручную — включите, и вентиляторы снова будут следовать температуре.")
             };
             col = col.child(setting_row(
-                "Программное авто (по температуре)",
+                t!("Программное авто (по температуре)"),
                 desc,
                 Box::new(Toggle::new().on(saved.fan_curve).on_change(move |v| c.send(Job::SetFlag(Flag::FanCurve, v)))),
             ));
@@ -281,7 +281,7 @@ fn fans(ctx: AppCtx) -> impl Widget {
                     m.insert(idx, v);
                     c.fan_edit.set(m);
                 };
-                let target_text = if auto { "авто".to_string() } else { format!("{target} об/мин") };
+                let target_text = if auto { t!("авто").to_string() } else { t!("{target} об/мин", target = target) };
                 col = col.child(
                     Column::new()
                         .gap(10.0)
@@ -294,19 +294,18 @@ fn fans(ctx: AppCtx) -> impl Widget {
                                 .child(
                                     Column::new()
                                         .gap(2.0)
-                                        .child(Text::new(format!("{} · №{}", f.label, f.index)).class("row-title"))
+                                        .child(Text::new(format!("{} · №{}", t!(f.label), f.index)).class("row-title"))
                                         .child(
-                                            Text::new(format!(
-                                                "Сейчас {} об/мин · цель: {}{}",
-                                                f.rpm,
-                                                target_text,
-                                                if changed { " (не применено)" } else { "" }
-                                            ))
+                                            Text::new(if changed {
+                                                t!("Сейчас {rpm} об/мин · цель: {target} (не применено)", rpm = f.rpm, target = target_text)
+                                            } else {
+                                                t!("Сейчас {rpm} об/мин · цель: {target}", rpm = f.rpm, target = target_text)
+                                            })
                                             .class(if changed { "row-desc changed" } else { "row-desc" }),
                                         )
                                         .class("grow"),
                                 )
-                                .child(Text::new("Авто").class("field-label"))
+                                .child(Text::new(t!("Авто")).class("field-label"))
                                 .child(
                                     Toggle::new()
                                         .on(auto)
@@ -332,9 +331,9 @@ fn fans(ctx: AppCtx) -> impl Widget {
                         )
                         .child(
                             Row::new()
-                                .child(Text::new(format!("{} об/мин", f.min)).class("scale-label"))
+                                .child(Text::new(t!("{min} об/мин", min = f.min)).class("scale-label"))
                                 .child(DecoratedBox::new().class("grow"))
-                                .child(Text::new(format!("{} об/мин", f.max)).class("scale-label")),
+                                .child(Text::new(t!("{max} об/мин", max = f.max)).class("scale-label")),
                         ),
                 );
             }
@@ -347,7 +346,7 @@ fn fans(ctx: AppCtx) -> impl Widget {
 fn autoapply(ctx: AppCtx) -> impl Widget {
     card_with(
         icons::RESTART,
-        "Служба",
+        t!("Служба"),
         || Text::new("").class("card-hint"),
         reactive_box(move || {
             let (svc, saved) = ctx.sink.autoapply.get();
@@ -357,19 +356,19 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
 
             let c = ctx.clone();
             let desc = if !svc.installed {
-                "Служба ставится вместе с пакетом. При сборке из исходников скопируйте \
-                 packaging/linux-legion-autoapply.service в ~/.config/systemd/user/."
+                t!("Служба ставится вместе с пакетом. При сборке из исходников скопируйте \
+                 packaging/linux-legion-autoapply.service в ~/.config/systemd/user/.")
             } else if svc.enabled && svc.active {
-                "Служба работает: восстанавливает значения «Своего» при входе, при переключении в «Свой» \
-                 и после сна, держит лимиты CPU и EPP по режиму, ведёт вентиляторы по температуре."
+                t!("Служба работает: восстанавливает значения «Своего» при входе, при переключении в «Свой» \
+                 и после сна, держит лимиты CPU и EPP по режиму, ведёт вентиляторы по температуре.")
             } else if svc.enabled {
-                "Служба включена, но сейчас не запущена — проверьте journalctl --user -u linux-legion-autoapply."
+                t!("Служба включена, но сейчас не запущена — проверьте journalctl --user -u linux-legion-autoapply.")
             } else {
-                "Прошивка забывает лимиты и обороты после перезагрузки, а лимиты CPU в RAPL вообще никто, \
-                 кроме службы, не выставляет. Служба делает это сама (linux-legion --daemon)."
+                t!("Прошивка забывает лимиты и обороты после перезагрузки, а лимиты CPU в RAPL вообще никто, \
+                 кроме службы, не выставляет. Служба делает это сама (linux-legion --daemon).")
             };
             col = col.child(setting_row(
-                "Служба linux-legion",
+                t!("Служба linux-legion"),
                 desc,
                 Box::new(
                     Toggle::new()
@@ -384,19 +383,19 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
                 .iter()
                 .map(|(name, v)| {
                     let t = tunables.iter().find(|t| &t.name == name);
-                    let label = t.map_or(name.clone(), |t| t.label.clone());
-                    format!("{label}: {v} {}", t.map_or("", |t| t.unit))
+                    let label = t.map_or(name.clone(), |t| t!(&t.label));
+                    format!("{label}: {v} {}", t.map_or(String::new(), |t| t!(t.unit)))
                 })
                 .collect();
             items.extend(saved.fans.iter().map(|(i, rpm)| {
-                let label = fans.iter().find(|f| f.index == *i).map_or("Вентилятор", |f| f.label);
-                let v = if *rpm == 0 { "авто".to_string() } else { format!("{rpm} об/мин") };
-                format!("Вентилятор «{label}»: {v}")
+                let label = fans.iter().find(|f| f.index == *i).map_or(t!("Вентилятор"), |f| t!(f.label));
+                let v = if *rpm == 0 { t!("авто").to_string() } else { t!("{rpm} об/мин", rpm = rpm) };
+                t!("Вентилятор «{label}»: {value}", label = label, value = v)
             }));
             if items.is_empty() {
                 col = col.child(
                     Text::new(
-                        "Пока ничего не сохранено: значения запоминаются кнопками «Применить» в режиме «Свой».",
+                        t!("Пока ничего не сохранено: значения запоминаются кнопками «Применить» в режиме «Свой»."),
                     )
                     .class("muted"),
                 );
@@ -406,7 +405,7 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
                     let (k, v) = it.rsplit_once(": ").unwrap_or((it.as_str(), ""));
                     list = list.child(crate::ui::widgets::kv(k, v.to_string()));
                 }
-                col = col.child(Text::new("Сохранённые значения").class("field-label")).child(list);
+                col = col.child(Text::new(t!("Сохранённые значения")).class("field-label")).child(list);
             }
             Box::new(col)
         }),
@@ -417,31 +416,31 @@ fn autoapply(ctx: AppCtx) -> impl Widget {
 fn cpu(ctx: AppCtx) -> impl Widget {
     card_with(
         icons::MEMORY,
-        "Процессор по режимам",
+        t!("Процессор по режимам"),
         || Text::new("").class("card-hint"),
         reactive_box(move || {
             let st = ctx.sink.cpu.get();
             let (_, saved) = ctx.sink.autoapply.get();
             let power = ctx.sink.power.get();
             if !st.rapl.present() && st.epp.current.is_none() {
-                return Box::new(Text::new("RAPL (powercap) и EPP (cpufreq) недоступны.").class("muted"));
+                return Box::new(Text::new(t!("RAPL (powercap) и EPP (cpufreq) недоступны.")).class("muted"));
             }
             let mut col = Column::new().gap(16.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             let fmt = |l: Option<crate::hw::rapl::Limits>| match l {
-                Some(l) => format!("{} / {} Вт", l.pl1, l.pl2),
+                Some(l) => t!("{pl1} / {pl2} Вт", pl1 = l.pl1, pl2 = l.pl2),
                 None => "—".to_string(),
             };
             if st.rapl.present() {
                 let c = ctx.clone();
                 let desc = if !st.rapl.writable {
-                    "Нет прав на запись в powercap — обновите udev-правило пакета (группа wheel)."
+                    t!("Нет прав на запись в powercap — обновите udev-правило пакета (группа wheel).")
                 } else {
-                    "BIOS при загрузке ставит в RAPL MMIO 30/30 Вт и больше их не меняет: без этого \
+                    t!("BIOS при загрузке ставит в RAPL MMIO 30/30 Вт и больше их не меняет: без этого \
                      процессор во всех режимах упирается в 30 Вт. Служба держит в RAPL (MSR и MMIO) \
-                     заводские лимиты режима, а в «Свой» — лимиты, заданные выше."
+                     заводские лимиты режима, а в «Свой» — лимиты, заданные выше.")
                 };
                 col = col.child(setting_row(
-                    "Лимиты CPU по режиму (RAPL)",
+                    t!("Лимиты CPU по режиму (RAPL)"),
                     desc,
                     Box::new(
                         Toggle::new()
@@ -457,22 +456,22 @@ fn cpu(ctx: AppCtx) -> impl Widget {
                     let mark = if power.mode == Some(m) { " ●" } else { "" };
                     list = list.child(kv(&format!("{}{mark}", m.label()), fmt(v)));
                 }
-                list = list.child(kv("Сейчас в RAPL: MSR", fmt(st.rapl.msr)));
-                list = list.child(kv("Сейчас в RAPL: MMIO", fmt(st.rapl.mmio)));
-                col = col.child(Text::new("PL1 / PL2 по режимам (свои — rapl.<режим>=PL1/PL2 в custom.conf)").class("field-label")).child(list);
+                list = list.child(kv(t!("Сейчас в RAPL: MSR"), fmt(st.rapl.msr)));
+                list = list.child(kv(t!("Сейчас в RAPL: MMIO"), fmt(st.rapl.mmio)));
+                col = col.child(Text::new(t!("PL1 / PL2 по режимам (свои — rapl.<режим>=PL1/PL2 в custom.conf)")).class("field-label")).child(list);
             }
             if let Some(cur) = st.epp.current.clone() {
                 let c = ctx.clone();
                 let desc = if !st.epp.writable {
-                    "Нет прав на запись EPP — обновите udev-правило пакета (группа wheel)."
+                    t!("Нет прав на запись EPP — обновите udev-правило пакета (группа wheel).")
                 } else {
-                    "performance в Производительность/Экстрим/Свой, balance_performance в Балансе, \
+                    t!("performance в Производительность/Экстрим/Свой, balance_performance в Балансе, \
                      balance_power в Тихом. Перекрывает tuned и power-profiles-daemon. Без performance \
-                     процессор не добирает верхние ступени turbo."
+                     процессор не добирает верхние ступени turbo.")
                 };
                 let want = power.mode.map(|m| m.epp()).unwrap_or("—");
                 col = col.child(setting_row(
-                    "EPP по режиму",
+                    t!("EPP по режиму"),
                     desc,
                     Box::new(
                         Toggle::new()
@@ -482,11 +481,11 @@ fn cpu(ctx: AppCtx) -> impl Widget {
                     ),
                 ));
                 let now = if st.epp.pinned() {
-                    format!("{cur} — governor performance, EPP прибит к performance")
+                    t!("{cur} — governor performance, EPP прибит к performance", cur = cur)
                 } else {
-                    format!("{cur} (для режима: {want})")
+                    t!("{cur} (для режима: {want})", cur = cur, want = want)
                 };
-                col = col.child(kv("EPP сейчас", now));
+                col = col.child(kv(t!("EPP сейчас"), now));
             }
             Box::new(col)
         }),

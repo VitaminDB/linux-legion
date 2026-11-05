@@ -221,7 +221,7 @@ impl Worker {
         match r {
             Ok(()) => self.notify(NoticeKind::Success, ok),
             Err(sysfs::Error::Rejected(..)) if power::read_state().mode != Some(PowerMode::Custom) => {
-                self.notify(NoticeKind::Error, "Драйвер принимает это значение только в режиме «Свой»")
+                self.notify(NoticeKind::Error, t!("Драйвер принимает это значение только в режиме «Свой»"))
             }
             Err(e) => self.notify(NoticeKind::Error, e.to_string()),
         }
@@ -242,7 +242,7 @@ impl Worker {
                     // Лимиты CPU/EPP под режим — на случай, если служба не запущена.
                     let _ = autoapply::apply_cpu(m);
                 }
-                self.sysfs_result(r, format!("Режим питания: {}", m.label()));
+                self.sysfs_result(r, t!("Режим питания: {label}", label = m.label()));
             }
             Job::SetTunable(name, v) => {
                 let label = self.label_of(&name);
@@ -259,49 +259,49 @@ impl Worker {
                     autoapply::remember_fan(i, rpm);
                     self.refresh_autoapply();
                 }
-                let text = if rpm == 0 { "авто".to_string() } else { format!("{rpm} об/мин") };
-                self.sysfs_result(r, format!("Вентилятор {i}: {text}"));
+                let text = if rpm == 0 { t!("авто").to_string() } else { t!("{rpm} об/мин", rpm = rpm) };
+                self.sysfs_result(r, t!("Вентилятор {i}: {text}", i = i, text = text));
             }
             Job::SetChargeType(t) => {
                 let r = battery::set_charge_type(t);
-                self.sysfs_result(r, format!("Режим зарядки: {}", t.label()));
+                self.sysfs_result(r, t!("Режим зарядки: {label}", label = t.label()));
             }
             Job::SetToggle(t, on) => {
                 let r = device::set_toggle(t, on);
-                let state = if on { "включено" } else { "выключено" };
+                let state = if on { t!("включено") } else { t!("выключено") };
                 self.sysfs_result(r, format!("{}: {state}", t.label()));
             }
-            Job::RgbProfile(n) => self.rgb_cmd(|kb| kb.set_profile(n), format!("Профиль подсветки {n}"), Some(n)),
+            Job::RgbProfile(n) => self.rgb_cmd(|kb| kb.set_profile(n), t!("Профиль подсветки {n}", n = n), Some(n)),
             Job::RgbBrightness(v) => self.rgb_cmd(|kb| kb.set_brightness(v), String::new(), None),
             Job::RgbLogo(on) => self.rgb_cmd(
                 |kb| kb.set_logo(on),
-                format!("Логотип {}", if on { "включён" } else { "выключен" }),
+                if on { t!("Логотип включён") } else { t!("Логотип выключен") },
                 None,
             ),
             Job::RgbLoad(n) => self.load_effects(n),
             Job::RgbWrite(n, effects) => {
                 self.sink.busy.set(true);
-                self.rgb_cmd(|kb| kb.set_effects(n, &effects), format!("Эффекты записаны в профиль {n}"), Some(n));
+                self.rgb_cmd(|kb| kb.set_effects(n, &effects), t!("Эффекты записаны в профиль {n}", n = n), Some(n));
                 self.sink.busy.set(false);
             }
             Job::SetAutoApply(on) => {
                 match autoapply::set_service(on) {
-                    Ok(()) if on => self.notify(NoticeKind::Success, "Автоприменение включено"),
-                    Ok(()) => self.notify(NoticeKind::Success, "Автоприменение выключено"),
-                    Err(e) => self.notify(NoticeKind::Error, format!("Служба автоприменения: {e}")),
+                    Ok(()) if on => self.notify(NoticeKind::Success, t!("Автоприменение включено")),
+                    Ok(()) => self.notify(NoticeKind::Success, t!("Автоприменение выключено")),
+                    Err(e) => self.notify(NoticeKind::Error, t!("Служба автоприменения: {e}", e = e)),
                 }
                 self.refresh_autoapply();
             }
             Job::RgbReset(n) => {
-                self.rgb_cmd(|kb| kb.reset_profile(n), format!("Профиль {n} сброшен к заводскому"), Some(n))
+                self.rgb_cmd(|kb| kb.reset_profile(n), t!("Профиль {n} сброшен к заводскому", n = n), Some(n))
             }
             Job::SetFlag(flag, on) => {
                 autoapply::remember_flag(flag, on);
-                let state = if on { "включено" } else { "выключено" };
+                let state = if on { t!("включено") } else { t!("выключено") };
                 let what = match flag {
-                    Flag::FanCurve => "Программное авто вентиляторов",
-                    Flag::Rapl => "Лимиты CPU по режиму",
-                    Flag::Epp => "EPP по режиму",
+                    Flag::FanCurve => t!("Программное авто вентиляторов"),
+                    Flag::Rapl => t!("Лимиты CPU по режиму"),
+                    Flag::Epp => t!("EPP по режиму"),
                 };
                 let mut r = Ok(());
                 if let Some(m) = power::read_state().mode {
@@ -324,7 +324,7 @@ impl Worker {
     }
 
     fn label_of(&self, name: &str) -> String {
-        power::read_tunables().into_iter().find(|t| t.name == name).map(|t| t.label).unwrap_or_else(|| name.into())
+        power::read_tunables().into_iter().find(|t| t.name == name).map(|t| t!(&t.label)).unwrap_or_else(|| name.into())
     }
 
     // --- подсветка ---------------------------------------------------------
@@ -386,14 +386,14 @@ impl Worker {
         match kb.effects(n) {
             Ok(e) => self.sink.rgb_effects.set_always(Some((n, e))),
             Err(e) => {
-                self.notify(NoticeKind::Error, format!("Не удалось прочитать профиль {n}: {e}"));
+                self.notify(NoticeKind::Error, t!("Не удалось прочитать профиль {n}: {e}", n = n, e = e));
             }
         }
     }
 
     fn rgb_cmd(&mut self, f: impl FnOnce(&mut Keyboard) -> crate::spectrum::device::Result<()>, ok: String, reload: Option<u8>) {
         let Some(kb) = self.kb.as_mut() else {
-            return self.notify(NoticeKind::Error, "Контроллер подсветки не подключён");
+            return self.notify(NoticeKind::Error, t!("Контроллер подсветки не подключён"));
         };
         match f(kb) {
             Ok(()) => {
@@ -407,7 +407,7 @@ impl Worker {
                 }
             }
             Err(e) => {
-                self.notify(NoticeKind::Error, format!("Подсветка: {e}"));
+                self.notify(NoticeKind::Error, t!("Подсветка: {e}", e = e));
                 if matches!(e, KbError::NotFound | KbError::Io(_)) {
                     self.rgb_fail(e);
                 }

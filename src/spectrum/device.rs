@@ -24,9 +24,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NotFound => write!(f, "контроллер подсветки Spectrum не найден"),
-            Error::Permission(p) => write!(f, "нет доступа к {p} — установите udev-правило"),
-            Error::Io(e) => write!(f, "ошибка ввода-вывода: {e}"),
+            Error::NotFound => write!(f, "{}", t!("контроллер подсветки Spectrum не найден")),
+            Error::Permission(p) => write!(f, "{}", t!("нет доступа к {p} — установите udev-правило", p = p)),
+            Error::Io(e) => write!(f, "{}", t!("ошибка ввода-вывода: {e}", e = e)),
             Error::Protocol(s) => write!(f, "{s}"),
         }
     }
@@ -85,7 +85,7 @@ impl Keyboard {
         let mut kb = Self { t, trace: std::env::var_os("LEGION_TRACE").is_some() };
         let r = kb.query(p::op::COMPATIBILITY, &[])?;
         if r[4] != 0 {
-            return Err(Error::Protocol(format!("контроллер несовместим (код {})", r[4])));
+            return Err(Error::Protocol(t!("контроллер несовместим (код {code})", code = r[4])));
         }
         Ok(kb)
     }
@@ -119,7 +119,7 @@ impl Keyboard {
                 return Ok(r);
             }
         }
-        Err(Error::Protocol(format!("контроллер не ответил на запрос 0x{op:02X}")))
+        Err(Error::Protocol(t!("контроллер не ответил на запрос 0x{op}", op = format!("{:02X}", op))))
     }
 
     fn send(&mut self, pkt: &Packet) -> Result<()> {
@@ -132,7 +132,7 @@ impl Keyboard {
     pub fn key_matrix(&mut self) -> Result<KeyMatrix> {
         let r = self.query(p::op::KEY_COUNT, &[7])?;
         let (height, width) =
-            p::parse_key_count(&r).ok_or_else(|| Error::Protocol("нет размера матрицы".into()))?;
+            p::parse_key_count(&r).ok_or_else(|| Error::Protocol(t!("нет размера матрицы").into()))?;
         let mut rows = Vec::with_capacity(height);
         for y in 0..height {
             let r = self.query_checked(p::op::KEY_PAGE, &[7, y as u8], |r| r[4] == 7 && r[5] == y as u8)?;
@@ -176,7 +176,7 @@ impl Keyboard {
         let r = self.query_checked(p::op::GET_EFFECTS, &[profile], |r| r[4] == profile)?;
         p::decode_effects(&r)
             .map(|(_, e)| e)
-            .ok_or_else(|| Error::Protocol("не удалось разобрать описание профиля".into()))
+            .ok_or_else(|| Error::Protocol(t!("не удалось разобрать описание профиля").into()))
     }
 
     pub fn set_effects(&mut self, profile: u8, effects: &[Effect]) -> Result<()> {

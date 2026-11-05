@@ -234,15 +234,15 @@ impl Preset {
     pub const ALL: [Preset; 7] =
         [Preset::All, Preset::Keyboard, Preset::Case, Preset::Wasd, Preset::Arrows, Preset::FRow, Preset::Digits];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Preset::All => "Все зоны",
-            Preset::Keyboard => "Клавиатура",
-            Preset::Case => "Корпус",
-            Preset::Wasd => "WASD",
-            Preset::Arrows => "Стрелки",
-            Preset::FRow => "F-ряд",
-            Preset::Digits => "Цифры",
+            Preset::All => t!("Все зоны"),
+            Preset::Keyboard => t!("Клавиатура"),
+            Preset::Case => t!("Корпус"),
+            Preset::Wasd => t!("WASD"),
+            Preset::Arrows => t!("Стрелки"),
+            Preset::FRow => t!("F-ряд"),
+            Preset::Digits => t!("Цифры"),
         }
     }
 }

@@ -53,12 +53,7 @@ fn hero(ctx: AppCtx) -> impl Widget {
                         .child(Text::new("LENOVO LEGION").class("hero-kicker"))
                         .child(Text::new(if i.model.is_empty() { "Legion".into() } else { i.model.clone() }).class("hero-title"))
                         .child(
-                            Text::new(format!(
-                                "{} · {} · {:.0} ГБ ОЗУ",
-                                if i.cpu.is_empty() { "CPU" } else { &i.cpu },
-                                if i.gpu.is_empty() { "GPU" } else { &i.gpu },
-                                i.memory_gb.round()
-                            ))
+                            Text::new(t!("{cpu} · {gpu} · {mem} ГБ ОЗУ", cpu = if i.cpu.is_empty() { "CPU" } else { &i.cpu }, gpu = if i.gpu.is_empty() { "GPU" } else { &i.gpu }, mem = format!("{:.0}", i.memory_gb.round())))
                             .class("hero-sub"),
                         )
                 })
@@ -138,12 +133,12 @@ fn cpu_card(ctx: AppCtx) -> impl Widget {
                 temp_color(temp),
                 132.0,
                 s.cpu_temp.map_or("—".into(), |t| format!("{t:.0}°")),
-                "температура",
+                t!("температура"),
             )))
-            .child(line("Загрузка", format!("{:.0} %", s.cpu_load)))
+            .child(line(&t!("Загрузка"), format!("{:.0} %", s.cpu_load)))
             .child(bar(s.cpu_load / 100.0, "accent"))
-            .child(line("Частота", s.cpu_mhz.map_or("—".into(), |m| format!("{:.2} ГГц", m as f32 / 1000.0))));
-        stat_card(icons::MEMORY, "Процессор", Box::new(body))
+            .child(line(&t!("Частота"), s.cpu_mhz.map_or("—".into(), |m| t!("{ghz} ГГц", ghz = format!("{:.2}", m as f32 / 1000.0)))));
+        stat_card(icons::MEMORY, &t!("Процессор"), Box::new(body))
     })
 }
 
@@ -163,29 +158,29 @@ fn gpu_card(ctx: AppCtx) -> impl Widget {
                             temp_color(temp),
                             132.0,
                             g.temp.map_or("—".into(), |t| format!("{t:.0}°")),
-                            "температура",
+                            t!("температура"),
                         )))
-                        .child(line("Загрузка", format!("{load:.0} %")))
+                        .child(line(&t!("Загрузка"), format!("{load:.0} %")))
                         .child(bar(load / 100.0, "accent"))
-                        .child(line("Мощность", g.power_w.map_or("—".into(), |p| format!("{p:.0} Вт")))),
+                        .child(line(&t!("Мощность"), g.power_w.map_or("—".into(), |p| t!("{p} Вт", p = format!("{:.0}", p))))),
                 )
             }
             Gpu::Sleeping => Box::new(
                 Column::new()
                     .gap(10.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .child(ring(0.0, Color::TRANSPARENT, 132.0, "zZ".into(), "спит"))
-                    .child(Text::new("Дискретная видеокарта отключена для экономии энергии").class("muted-center")),
+                    .child(ring(0.0, Color::TRANSPARENT, 132.0, "zZ".into(), t!("спит")))
+                    .child(Text::new(t!("Дискретная видеокарта отключена для экономии энергии")).class("muted-center")),
             ),
             Gpu::Absent => Box::new(
                 Column::new()
                     .gap(10.0)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .child(ring(0.0, Color::TRANSPARENT, 132.0, "—".into(), "нет данных"))
-                    .child(Text::new("Данные появятся через пару секунд").class("muted-center")),
+                    .child(ring(0.0, Color::TRANSPARENT, 132.0, "—".into(), t!("нет данных")))
+                    .child(Text::new(t!("Данные появятся через пару секунд")).class("muted-center")),
             ),
         };
-        stat_card(icons::GPU, "Видеокарта", body)
+        stat_card(icons::GPU, &t!("Видеокарта"), body)
     })
 }
 
@@ -196,17 +191,17 @@ fn mem_card(ctx: AppCtx) -> impl Widget {
         let body = Column::new()
             .gap(10.0)
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .child(Center::new().child(ring(frac, load_color(frac), 132.0, format!("{:.0}%", frac * 100.0), "занято")))
-            .child(line("Используется", format!("{:.1} ГБ", s.mem_used_gb)))
-            .child(line("Всего", format!("{:.1} ГБ", s.mem_total_gb)));
-        stat_card(icons::LAYERS, "Память", Box::new(body))
+            .child(Center::new().child(ring(frac, load_color(frac), 132.0, format!("{:.0}%", frac * 100.0), t!("занято"))))
+            .child(line(&t!("Используется"), t!("{mem_used_gb} ГБ", mem_used_gb = format!("{:.1}", s.mem_used_gb))))
+            .child(line(&t!("Всего"), t!("{mem_total_gb} ГБ", mem_total_gb = format!("{:.1}", s.mem_total_gb))));
+        stat_card(icons::LAYERS, &t!("Память"), Box::new(body))
     })
 }
 
 fn battery_card(ctx: AppCtx) -> impl Widget {
     reactive_box(move || {
         let Some(b) = ctx.sink.battery.get() else {
-            return Box::new(stat_card(icons::BATTERY_FULL, "Батарея", Box::new(Text::new("Нет батареи").class("muted"))));
+            return Box::new(stat_card(icons::BATTERY_FULL, &t!("Батарея"), Box::new(Text::new(t!("Нет батареи")).class("muted"))));
         };
         let color = match b.percent {
             p if p <= 15 => Color::from_hex("#f43f5e"),
@@ -214,17 +209,17 @@ fn battery_card(ctx: AppCtx) -> impl Widget {
             _ => Color::from_hex("#34d399"),
         };
         let time = match (b.status, b.minutes_left()) {
-            (Status::Discharging, Some(m)) => format!("{} ч {:02} мин", m / 60, m % 60),
-            (Status::Charging, Some(m)) => format!("до полной {} ч {:02} мин", m / 60, m % 60),
+            (Status::Discharging, Some(m)) => t!("{h} ч {m} мин", h = m / 60, m = format!("{:02}", m % 60)),
+            (Status::Charging, Some(m)) => t!("до полной {h} ч {m} мин", h = m / 60, m = format!("{:02}", m % 60)),
             _ => "—".into(),
         };
         let body = Column::new()
             .gap(10.0)
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .child(Center::new().child(ring(b.percent as f32 / 100.0, color, 132.0, format!("{}%", b.percent), b.status.label())))
-            .child(line("Питание", if b.ac_online { "от сети".into() } else { "от батареи".into() }))
-            .child(line("Осталось", time));
-        Box::new(stat_card(if b.ac_online { icons::BATTERY_CHARGING } else { icons::BATTERY_FULL }, "Батарея", Box::new(body)))
+            .child(line(&t!("Питание"), if b.ac_online { t!("от сети").into() } else { t!("от батареи").into() }))
+            .child(line(&t!("Осталось"), time));
+        Box::new(stat_card(if b.ac_online { icons::BATTERY_CHARGING } else { icons::BATTERY_FULL }, &t!("Батарея"), Box::new(body)))
     })
 }
 
@@ -232,16 +227,16 @@ fn fans_card(ctx: AppCtx) -> impl Widget {
     let c = ctx.clone();
     card_with(
         icons::FAN,
-        "Вентиляторы",
+        t!("Вентиляторы"),
         move || {
             let custom = c.power_mode() == Some(PowerMode::Custom);
-            Text::new(if custom { "ручное управление" } else { "автоматически" }).class("card-hint")
+            Text::new(if custom { t!("ручное управление") } else { t!("автоматически") }).class("card-hint")
         },
         reactive(move || {
             let fans = ctx.sink.fans.get();
             let mut row = Row::new().gap(24.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
             if fans.is_empty() {
-                return row.child(Text::new("Драйвер lenovo-wmi-other не отдаёт данные о вентиляторах").class("muted"));
+                return row.child(Text::new(t!("Драйвер lenovo-wmi-other не отдаёт данные о вентиляторах")).class("muted"));
             }
             for f in fans {
                 let frac = if f.max > 0 { f.rpm as f32 / f.max as f32 } else { 0.0 };
@@ -252,9 +247,9 @@ fn fans_card(ctx: AppCtx) -> impl Widget {
                         .child(
                             Row::new()
                                 .gap(8.0)
-                                .child(Text::new(f.label).class("stat-label"))
+                                .child(Text::new(t!(f.label)).class("stat-label"))
                                 .child(DecoratedBox::new().class("grow"))
-                                .child(Text::new(format!("{} об/мин", f.rpm)).class("stat-value")),
+                                .child(Text::new(t!("{rpm} об/мин", rpm = f.rpm)).class("stat-value")),
                         )
                         .child(bar(frac, "fan"))
                         .class("grow"),

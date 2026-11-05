@@ -21,19 +21,19 @@ impl Toggle {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Toggle::FnLock => "Fn Lock",
-            Toggle::Camera => "Питание веб-камеры",
-            Toggle::UsbCharging => "Зарядка по USB в выключенном состоянии",
+            Toggle::FnLock => t!("Fn Lock"),
+            Toggle::Camera => t!("Питание веб-камеры"),
+            Toggle::UsbCharging => t!("Зарядка по USB в выключенном состоянии"),
         }
     }
 
-    pub fn hint(self) -> &'static str {
+    pub fn hint(self) -> String {
         match self {
-            Toggle::FnLock => "F1–F12 работают как функциональные клавиши без удержания Fn.",
-            Toggle::Camera => "Выключает камеру аппаратно — ни одна программа не сможет её включить.",
-            Toggle::UsbCharging => "Порт USB с молнией заряжает телефон, даже когда ноутбук выключен или спит.",
+            Toggle::FnLock => t!("F1–F12 работают как функциональные клавиши без удержания Fn."),
+            Toggle::Camera => t!("Выключает камеру аппаратно — ни одна программа не сможет её включить."),
+            Toggle::UsbCharging => t!("Порт USB с молнией заряжает телефон, даже когда ноутбук выключен или спит."),
         }
     }
 }

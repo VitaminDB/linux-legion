@@ -32,19 +32,19 @@ impl ChargeType {
         })
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            ChargeType::Fast => "Быстрая зарядка",
-            ChargeType::Standard => "Обычная",
-            ChargeType::LongLife => "Сбережение",
+            ChargeType::Fast => t!("Быстрая зарядка"),
+            ChargeType::Standard => t!("Обычная"),
+            ChargeType::LongLife => t!("Сбережение"),
         }
     }
 
-    pub fn hint(self) -> &'static str {
+    pub fn hint(self) -> String {
         match self {
-            ChargeType::Fast => "Заряжает быстрее, но сильнее нагревает аккумулятор.",
-            ChargeType::Standard => "Штатная зарядка до 100 %.",
-            ChargeType::LongLife => "Заряд держится около 80 % — продлевает жизнь аккумулятора, если ноутбук всегда в сети.",
+            ChargeType::Fast => t!("Заряжает быстрее, но сильнее нагревает аккумулятор."),
+            ChargeType::Standard => t!("Штатная зарядка до 100 %."),
+            ChargeType::LongLife => t!("Заряд держится около 80 % — продлевает жизнь аккумулятора, если ноутбук всегда в сети."),
         }
     }
 }
@@ -59,13 +59,13 @@ pub enum Status {
 }
 
 impl Status {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Status::Charging => "Заряжается",
-            Status::Discharging => "Разряжается",
-            Status::Full => "Заряжена",
-            Status::NotCharging => "Не заряжается",
-            Status::Unknown => "—",
+            Status::Charging => t!("Заряжается"),
+            Status::Discharging => t!("Разряжается"),
+            Status::Full => t!("Заряжена"),
+            Status::NotCharging => t!("Не заряжается"),
+            Status::Unknown => t!("—"),
         }
     }
 }
