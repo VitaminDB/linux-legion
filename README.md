@@ -1,6 +1,5 @@
 # linux-legion
 
-[![Vibe-coded with Claude Code](https://img.shields.io/badge/vibe--coded-Claude%20Code-d97757)](#how-it-is-built)
 
 A Linux control center for **Lenovo Legion** laptops — what Lenovo Vantage / Legion Space does on
 Windows: power modes, CPU power limits, fans, per-key **Spectrum RGB** lighting, battery charging
@@ -199,10 +198,10 @@ empty, removed ones dropped; `cargo test` fails while any catalog has untranslat
 `cargo test -- --ignored live_` writes test layers to an inactive profile of the real keyboard,
 reads them back and restores the original profile byte for byte.
 
-## How it is built
+## How it is tested
 
-Since spring 2026 I have been working in [Claude Code](https://claude.com/claude-code). Every
-packet format was captured from and tested on my own Legion laptop.
+Every packet format was captured from and tested on my own Legion laptop. Developed with the
+help of [Claude Code](https://claude.com/claude-code).
 
 ## Disclaimer
 
