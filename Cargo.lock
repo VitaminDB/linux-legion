@@ -1234,7 +1234,7 @@ dependencies = [
 [[package]]
 name = "mss-lang"
 version = "0.1.0"
-source = "git+https://github.com/VitaminDB/syngui.git?branch=master#43e43f7327e976b3360be78669f2f7cee70bae49"
+source = "git+https://github.com/VitaminDB/syngui.git?branch=master#ff30a9045b889fcfebc16427e053ff2a82b56246"
 
 [[package]]
 name = "naga"
@@ -2212,11 +2212,12 @@ dependencies = [
 [[package]]
 name = "syngui"
 version = "0.1.0"
-source = "git+https://github.com/VitaminDB/syngui.git?branch=master#43e43f7327e976b3360be78669f2f7cee70bae49"
+source = "git+https://github.com/VitaminDB/syngui.git?branch=master#ff30a9045b889fcfebc16427e053ff2a82b56246"
 dependencies = [
  "android-activity",
  "android_logger",
  "anyhow",
+ "ash",
  "bitflags 2.13.2",
  "bytemuck",
  "compact_str",
@@ -2247,6 +2248,7 @@ dependencies = [
  "wgpu",
  "wide",
  "winit",
+ "yeslogic-fontconfig-sys",
 ]
 
 [[package]]
