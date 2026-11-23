@@ -21,9 +21,13 @@ service keeps the CPU power limits and fans in line with the selected mode).
 |---|---|
 | ![Lighting](screenshots/lighting.png) | ![Layers](screenshots/lighting-layers.png) |
 
-| Performance | Battery | Device |
-|---|---|---|
-| ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
+| Performance — modes and own profiles | CPU and GPU limits |
+|---|---|
+| ![Performance](screenshots/performance.png) | ![Power limits](screenshots/performance-limits.png) |
+
+| Battery | Device |
+|---|---|
+| ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
 
 The interface speaks 14 languages and follows the system language; switch it live from the header.
 Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux-legion --screenshot` (see [Usage](#usage)).
@@ -79,7 +83,9 @@ firmware reports. `linux-legion --simulate` shows the whole UI without the hardw
 ### Arch Linux (AUR)
 
 ```bash
-yay -S linux-legion        # or paru -S linux-legion
+yay -S linux-legion        # build from the release source (or paru -S linux-legion)
+yay -S linux-legion-bin    # prebuilt release archive
+yay -S linux-legion-git    # latest master
 ```
 
 The package installs `/usr/bin/linux-legion`, a menu entry, icons and the udev rule.

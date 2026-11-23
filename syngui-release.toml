@@ -6,6 +6,8 @@ url = "https://github.com/VitaminDB/linux-legion"
 license = ["MIT"]
 makedepends = ["cargo", "git"]
 options = ["!lto", "!debug"]
+# ноутбуки Legion — только x86_64
+arches = ["x86_64"]
 
 [packages.linux-legion]
 description = "Центр управления ноутбуками Lenovo Legion: режимы питания и свои профили, вентиляторы, подсветка Spectrum, батарея"
@@ -30,3 +32,5 @@ files = [
     { from = "LICENSE", to = "usr/share/licenses/linux-legion/LICENSE" },
 ]
 install = "packaging/linux-legion.install"
+# в AUR: linux-legion (из исходников тега), linux-legion-bin (архив релиза), linux-legion-git
+aur_source = true

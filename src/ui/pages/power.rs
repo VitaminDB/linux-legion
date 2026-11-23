@@ -35,13 +35,15 @@ pub fn view(ctx: AppCtx) -> impl Widget {
         .child(modes_card(ctx.clone()))
         .child(profile_editor(ctx.clone()))
         .child(custom_notice(ctx.clone()))
-        .child(
+        // Имя — для `--scroll-to power-limits` (снимки для README).
+        .child(syngui::widgets::Named::new(
+            "power-limits",
             Row::new()
                 .gap(18.0)
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .child(tunables(ctx.clone(), Group::Cpu).class("grow").class("half"))
                 .child(tunables(ctx.clone(), Group::Gpu).class("grow").class("half")),
-        )
+        ))
         .child(cpu(ctx.clone()))
         .child(fans(ctx.clone()))
         .child(autoapply(ctx))
