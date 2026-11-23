@@ -23,13 +23,27 @@
 //! cpu.rapl=1          # лимиты CPU по режиму
 //! cpu.epp=0           # EPP по режиму
 //! rapl.performance=150/190   # свои PL1/PL2 для режима
+//! profile.1.name=Экстрим 90°  # свой профиль на основе режима прошивки
+//! profile.1.base=extreme
+//! profile.1.rapl=160/205
+//! profile.1.cpu_temp=90       # предел температуры CPU (TCC), в любом режиме
+//! profile.1.tunable.ppt_pl1_spl=150   # лимиты прошивки и обороты — при base=custom
+//! profile.1.fan.1=3000
+//! profile.active=1            # действует, пока включён его режим
 //! ```
+//!
+//! **Свои профили** — именованные наборы поверх режима прошивки: режим
+//! (Тихий…Экстрим, «Свой»), PL1/PL2, предел температуры CPU, а при основе
+//! «Свой» — лимиты прошивки и обороты. Активный профиль действует, пока
+//! включён его режим (в том числе по Fn+Q); выбор встроенного режима в
+//! интерфейсе снимает профиль.
 
 use crate::hw::cpufreq;
 use crate::hw::fans::{self, Fan};
 use crate::hw::power::{self, PowerMode};
 use crate::hw::rapl::{self, Limits};
 use crate::hw::sensors::{Gpu, Sampler};
+use crate::hw::tcc;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::Command;
@@ -80,6 +94,46 @@ impl Flag {
     }
 }
 
+/// Свой профиль: режим прошивки и что поверх него.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Profile {
+    pub id: u32,
+    pub name: String,
+    /// Режим прошивки, на котором основан профиль.
+    pub base: PowerMode,
+    /// PL1/PL2 (RAPL); `None` — заводские для режима.
+    pub rapl: Option<Limits>,
+    /// Предел температуры CPU (TCC), °C; `None` — как задаёт прошивка.
+    pub cpu_temp: Option<u32>,
+    /// Лимиты прошивки (действуют только при основе «Свой»).
+    pub tunables: BTreeMap<String, i64>,
+    /// Обороты (только «Свой»): номер → об/мин, 0 — авто.
+    pub fans: BTreeMap<u8, u32>,
+}
+
+impl Profile {
+    pub fn new(id: u32, name: impl Into<String>, base: PowerMode) -> Self {
+        Profile {
+            id,
+            name: name.into(),
+            base,
+            rapl: None,
+            cpu_temp: None,
+            tunables: BTreeMap::new(),
+            fans: BTreeMap::new(),
+        }
+    }
+}
+
+/// Что действует в режиме: из активного профиля или встроенное.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct Effective {
+    pub rapl: Option<Limits>,
+    pub cpu_temp: Option<u32>,
+    pub tunables: BTreeMap<String, i64>,
+    pub fans: BTreeMap<u8, u32>,
+}
+
 /// Сохранённые настройки.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Saved {
@@ -91,6 +145,10 @@ pub struct Saved {
     pub epp: bool,
     /// Свои PL1/PL2 для режимов (поверх `PowerMode::cpu_limits`).
     pub rapl_modes: BTreeMap<String, Limits>,
+    /// Свои профили по порядку создания.
+    pub profiles: Vec<Profile>,
+    /// Активный свой профиль.
+    pub active: Option<u32>,
 }
 
 impl Default for Saved {
@@ -102,8 +160,15 @@ impl Default for Saved {
             rapl: true,
             epp: false,
             rapl_modes: BTreeMap::new(),
+            profiles: Vec::new(),
+            active: None,
         }
     }
+}
+
+fn parse_limits(v: &str) -> Option<Limits> {
+    let (a, b) = v.split_once('/')?;
+    Some(Limits { pl1: a.trim().parse().ok()?, pl2: b.trim().parse().ok()? })
 }
 
 impl Saved {
@@ -111,6 +176,10 @@ impl Saved {
         let mut s = Saved::default();
         for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
             let Some((k, v)) = line.split_once('=') else { continue };
+            if let Some(rest) = k.trim().strip_prefix("profile.") {
+                s.parse_profile(rest, v);
+                continue;
+            }
             let (k, v) = (k.trim(), v.split('#').next().unwrap_or("").trim());
             let flag = |s: &mut bool| {
                 if let Ok(n) = v.parse::<u8>() {
@@ -132,16 +201,91 @@ impl Saved {
                     s.fans.insert(i, v);
                 }
             } else if let Some(mode) = k.strip_prefix("rapl.") {
-                if let Some((a, b)) = v.split_once('/') {
-                    if let (Ok(pl1), Ok(pl2)) = (a.trim().parse(), b.trim().parse()) {
-                        if PowerMode::from_key(mode).is_some() {
-                            s.rapl_modes.insert(mode.to_string(), Limits { pl1, pl2 });
-                        }
+                if let (Some(l), Some(_)) = (parse_limits(v), PowerMode::from_key(mode)) {
+                    s.rapl_modes.insert(mode.to_string(), l);
+                }
+            }
+        }
+        // Профиль без режима не годится; активный — только существующий.
+        s.profiles.retain(|p| p.id != 0);
+        if s.active.is_some_and(|id| s.profile(id).is_none()) {
+            s.active = None;
+        }
+        s
+    }
+
+    /// Строка `profile.<rest>=<v>`. Имя берётся как есть (в нём может быть «#»).
+    fn parse_profile(&mut self, rest: &str, raw: &str) {
+        let clean = raw.split('#').next().unwrap_or("").trim();
+        if rest == "active" {
+            self.active = clean.parse().ok().filter(|&id| id != 0);
+            return;
+        }
+        let Some((id, field)) = rest.split_once('.') else { return };
+        let Ok(id) = id.parse::<u32>() else { return };
+        if id == 0 {
+            return;
+        }
+        let i = match self.profiles.iter().position(|p| p.id == id) {
+            Some(i) => i,
+            None => {
+                self.profiles.push(Profile::new(id, format!("#{id}"), PowerMode::Custom));
+                self.profiles.len() - 1
+            }
+        };
+        let p = &mut self.profiles[i];
+        match field {
+            "name" => p.name = raw.trim().to_string(),
+            "base" => {
+                if let Some(m) = PowerMode::from_key(clean) {
+                    p.base = m;
+                }
+            }
+            "rapl" => p.rapl = parse_limits(clean),
+            "cpu_temp" => p.cpu_temp = clean.parse().ok(),
+            _ => {
+                if let Some(name) = field.strip_prefix("tunable.") {
+                    if let Ok(v) = clean.parse() {
+                        p.tunables.insert(name.to_string(), v);
+                    }
+                } else if let Some(n) = field.strip_prefix("fan.") {
+                    if let (Ok(n), Ok(v)) = (n.parse(), clean.parse()) {
+                        p.fans.insert(n, v);
                     }
                 }
             }
         }
-        s
+    }
+
+    pub fn profile(&self, id: u32) -> Option<&Profile> {
+        self.profiles.iter().find(|p| p.id == id)
+    }
+
+    /// Активный профиль, если сейчас включён его режим.
+    pub fn active_for(&self, mode: PowerMode) -> Option<&Profile> {
+        self.active.and_then(|id| self.profile(id)).filter(|p| p.base == mode)
+    }
+
+    /// Что действует в режиме.
+    pub fn effective(&self, mode: PowerMode) -> Effective {
+        match self.active_for(mode) {
+            Some(p) => Effective {
+                rapl: p.rapl.or_else(|| self.builtin_limits(mode)),
+                cpu_temp: p.cpu_temp,
+                tunables: p.tunables.clone(),
+                fans: p.fans.clone(),
+            },
+            None => Effective {
+                rapl: self.builtin_limits(mode),
+                cpu_temp: None,
+                tunables: self.tunables.clone(),
+                fans: self.fans.clone(),
+            },
+        }
+    }
+
+    pub fn next_id(&self) -> u32 {
+        self.profiles.iter().map(|p| p.id).max().unwrap_or(0) + 1
     }
 
     fn render(&self) -> String {
@@ -158,12 +302,36 @@ impl Saved {
         for (m, l) in &self.rapl_modes {
             out.push_str(&format!("rapl.{m}={}/{}\n", l.pl1, l.pl2));
         }
+        for p in &self.profiles {
+            let id = p.id;
+            out.push_str(&format!("profile.{id}.name={}\n", p.name.replace('\n', " ")));
+            out.push_str(&format!("profile.{id}.base={}\n", p.base.key()));
+            if let Some(l) = p.rapl {
+                out.push_str(&format!("profile.{id}.rapl={}/{}\n", l.pl1, l.pl2));
+            }
+            if let Some(t) = p.cpu_temp {
+                out.push_str(&format!("profile.{id}.cpu_temp={t}\n"));
+            }
+            for (k, v) in &p.tunables {
+                out.push_str(&format!("profile.{id}.tunable.{k}={v}\n"));
+            }
+            for (k, v) in &p.fans {
+                out.push_str(&format!("profile.{id}.fan.{k}={v}\n"));
+            }
+        }
+        if let Some(id) = self.active {
+            out.push_str(&format!("profile.active={id}\n"));
+        }
         out
     }
 
     /// Лимиты CPU для режима: свои из конфига, иначе заводские Lenovo;
     /// для «Свой» — текущие атрибуты прошивки.
     pub fn limits_for(&self, mode: PowerMode) -> Option<Limits> {
+        self.builtin_limits(mode)
+    }
+
+    fn builtin_limits(&self, mode: PowerMode) -> Option<Limits> {
         if let Some(l) = self.rapl_modes.get(mode.key()) {
             return Some(*l);
         }
@@ -190,17 +358,56 @@ fn store(s: &Saved) -> std::io::Result<()> {
     std::fs::rename(tmp, path())
 }
 
-/// Запомнить значение, которое пользователь применил в режиме «Свой».
+/// Активный профиль на основе «Свой», если он сейчас действует.
+fn active_custom(s: &mut Saved) -> Option<&mut Profile> {
+    let id = s.active_for(PowerMode::Custom)?.id;
+    s.profiles.iter_mut().find(|p| p.id == id)
+}
+
+/// Запомнить значение, которое пользователь применил в режиме «Свой»
+/// (в активный профиль, если он действует, иначе — во встроенный «Свой»).
 pub fn remember_tunable(name: &str, value: i64) {
     let mut s = load();
-    s.tunables.insert(name.to_string(), value);
+    match active_custom(&mut s) {
+        Some(p) => p.tunables.insert(name.to_string(), value),
+        None => s.tunables.insert(name.to_string(), value),
+    };
     let _ = store(&s);
 }
 
 pub fn remember_fan(index: u8, rpm: u32) {
     let mut s = load();
-    s.fans.insert(index, rpm);
+    match active_custom(&mut s) {
+        Some(p) => p.fans.insert(index, rpm),
+        None => s.fans.insert(index, rpm),
+    };
     let _ = store(&s);
+}
+
+/// Сохранить профиль (новый или изменённый).
+pub fn save_profile(p: Profile) -> std::io::Result<()> {
+    let mut s = load();
+    match s.profiles.iter_mut().find(|x| x.id == p.id) {
+        Some(x) => *x = p,
+        None => s.profiles.push(p),
+    }
+    store(&s)
+}
+
+pub fn delete_profile(id: u32) -> std::io::Result<()> {
+    let mut s = load();
+    s.profiles.retain(|p| p.id != id);
+    if s.active == Some(id) {
+        s.active = None;
+    }
+    store(&s)
+}
+
+/// Сделать профиль активным (`None` — встроенные режимы).
+pub fn set_active(id: Option<u32>) -> std::io::Result<()> {
+    let mut s = load();
+    s.active = id.filter(|id| s.profile(*id).is_some());
+    store(&s)
 }
 
 pub fn remember_flag(flag: Flag, on: bool) {
@@ -221,10 +428,11 @@ pub fn apply_custom() -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     }
     let saved = load();
+    let eff = saved.effective(PowerMode::Custom);
     let mut done = Vec::new();
     let mut errors = Vec::new();
     let current: BTreeMap<String, i64> = power::read_tunables().into_iter().map(|t| (t.name, t.value)).collect();
-    for (name, v) in &saved.tunables {
+    for (name, v) in &eff.tunables {
         if current.get(name) == Some(v) || !current.contains_key(name) {
             continue;
         }
@@ -235,7 +443,7 @@ pub fn apply_custom() -> Result<Vec<String>, String> {
     }
     if !saved.fan_curve {
         let present: Vec<u8> = fans::read_fans().into_iter().map(|f| f.index).collect();
-        for (i, rpm) in saved.fans.iter().filter(|(i, _)| present.contains(i)) {
+        for (i, rpm) in eff.fans.iter().filter(|(i, _)| present.contains(i)) {
             match fans::set_target(*i, *rpm) {
                 Ok(()) => done.push(format!("fan{i}={rpm}")),
                 Err(e) => errors.push(e.to_string()),
@@ -254,14 +462,20 @@ pub fn apply_cpu(mode: PowerMode) -> Result<Vec<String>, String> {
     let saved = load();
     let mut done = Vec::new();
     let mut errors = Vec::new();
+    let eff = saved.effective(mode);
     if saved.rapl && rapl::read().present() {
-        match saved.limits_for(mode) {
+        match eff.rapl {
             Some(l) => match rapl::set(l) {
                 Ok(d) => done.extend(d),
                 Err(e) => errors.push(e.to_string()),
             },
             None => errors.push("лимиты «Свой»: атрибуты прошивки не найдены".into()),
         }
+    }
+    match apply_tcc(eff.cpu_temp) {
+        Ok(Some(d)) => done.push(d),
+        Ok(None) => {}
+        Err(e) => errors.push(e),
     }
     if saved.epp && cpufreq::read().current.is_some() {
         match cpufreq::set(mode.epp()) {
@@ -274,6 +488,38 @@ pub fn apply_cpu(mode: PowerMode) -> Result<Vec<String>, String> {
         Ok(done)
     } else {
         Err(errors.join("; "))
+    }
+}
+
+/// Процесс выставлял свой предел TCC — без профиля вернуть заводской.
+static TCC_TOUCHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Заводской предел температуры CPU: `default_value` атрибута прошивки
+/// `cpu_temp` (на Legion Pro 7 Gen 10 — 103 °C, TCC offset 2), иначе TjMax.
+fn tcc_default() -> Option<u32> {
+    power::read_tunables().into_iter().find(|t| t.name == "cpu_temp").and_then(|t| t.default).map(|v| v as u32)
+}
+
+/// Предел температуры CPU профиля; без него — вернуть заводской, если трогали.
+fn apply_tcc(want: Option<u32>) -> Result<Option<String>, String> {
+    use std::sync::atomic::Ordering;
+    let Some(cur) = tcc::read() else {
+        return match want {
+            Some(_) => Err("предел температуры CPU: нет intel_tcc_cooling (TCC Offset)".into()),
+            None => Ok(None),
+        };
+    };
+    let target = match want {
+        Some(t) => t,
+        None if TCC_TOUCHED.load(Ordering::Relaxed) => tcc_default().unwrap_or(cur.tjmax),
+        None => return Ok(None),
+    };
+    match tcc::set_limit(target) {
+        Ok(changed) => {
+            TCC_TOUCHED.store(want.is_some(), Ordering::Relaxed);
+            Ok(changed.then(|| format!("tcc {target}°C")))
+        }
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -364,6 +610,7 @@ impl FanCurve {
         let Some(cpu_t) = cpu.or(gpu) else { return Vec::new() };
         let gpu_t = gpu.unwrap_or(cpu_t);
         let mut done = Vec::new();
+        let fixed_rpm = (mode == Some(PowerMode::Custom)).then(|| saved.effective(PowerMode::Custom).fans);
         for f in fans::read_fans().iter().filter(|f| f.writable && f.max > 0) {
             let temp = match f.index {
                 1 => cpu_t,
@@ -371,7 +618,7 @@ impl FanCurve {
                 _ => cpu_t.max(gpu_t),
             };
             let auto = curve_rpm(f, temp, mode);
-            let fixed = (mode == Some(PowerMode::Custom)).then(|| saved.fans.get(&f.index).copied()).flatten();
+            let fixed = fixed_rpm.as_ref().and_then(|m| m.get(&f.index).copied());
             let want = match fixed {
                 Some(rpm) if rpm > 0 => {
                     if temp >= SAFETY_TEMP {
@@ -562,6 +809,48 @@ mod tests {
         assert!(p.rapl && !p.epp && !p.fan_curve);
         let p = Saved::parse("cpu.rapl=0\n");
         assert!(!p.rapl);
+    }
+
+    #[test]
+    fn profiles_roundtrip() {
+        let mut s = Saved::default();
+        let mut p = Profile::new(3, "Экстрим #90° = тихо", PowerMode::Extreme);
+        p.rapl = Some(Limits { pl1: 160, pl2: 205 });
+        p.cpu_temp = Some(90);
+        s.profiles.push(p);
+        let mut c = Profile::new(5, "Свой копия", PowerMode::Custom);
+        c.tunables.insert("ppt_pl1_spl".into(), 120);
+        c.fans.insert(1, 3000);
+        s.profiles.push(c);
+        s.active = Some(3);
+        let text = s.render();
+        assert!(text.contains("profile.3.cpu_temp=90"));
+        assert_eq!(Saved::parse(&text), s);
+        assert_eq!(s.next_id(), 6);
+
+        // профиль действует только в своём режиме
+        let e = s.effective(PowerMode::Extreme);
+        assert_eq!(e.cpu_temp, Some(90));
+        assert_eq!(e.rapl, Some(Limits { pl1: 160, pl2: 205 }));
+        let e = s.effective(PowerMode::Performance);
+        assert_eq!(e.cpu_temp, None);
+        assert_eq!(e.rapl, Some(Limits { pl1: 145, pl2: 190 }));
+        // без своих PL — заводские режима
+        s.profiles[0].rapl = None;
+        assert_eq!(s.effective(PowerMode::Extreme).rapl, Some(Limits { pl1: 160, pl2: 205 }));
+        // профиль «Свой» подменяет встроенные лимиты и обороты
+        s.active = Some(5);
+        s.tunables.insert("ppt_pl1_spl".into(), 90);
+        assert_eq!(s.effective(PowerMode::Custom).tunables.get("ppt_pl1_spl"), Some(&120));
+        assert_eq!(s.effective(PowerMode::Custom).fans.get(&1), Some(&3000));
+        s.active = None;
+        assert_eq!(s.effective(PowerMode::Custom).tunables.get("ppt_pl1_spl"), Some(&90));
+
+        // активный — только существующий; мусор не ломает разбор
+        let p = Saved::parse("profile.active=9\nprofile.x.name=a\nprofile.0.name=b\nprofile.2.base=nope\n");
+        assert_eq!(p.active, None);
+        assert_eq!(p.profiles.len(), 1);
+        assert_eq!(p.profiles[0].base, PowerMode::Custom);
     }
 
     #[test]

@@ -32,7 +32,7 @@ pub fn card<M>(title: impl Into<String>, hint: impl Into<String>, body: impl Int
 }
 
 /// Карточка с иконкой в заголовке и произвольным правым краем.
-pub fn card_with<M, N>(icon: &str, title: impl Into<String>, trailing: impl IntoWidget<N>, body: impl IntoWidget<M>) -> impl Widget {
+pub fn card_with<M, N>(icon: &str, title: impl Into<String>, trailing: impl IntoWidget<N>, body: impl IntoWidget<M>) -> syngui::StyledWidget<DecoratedBox> {
     DecoratedBox::new()
         .child(
             Column::new()

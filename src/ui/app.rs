@@ -1,6 +1,7 @@
 //! Контекст приложения и оболочка окна: шапка, навигация, страница, строка состояния.
 
 use super::{icons, pages, widgets};
+use crate::autoapply::Profile;
 use crate::hw::battery::Battery;
 use crate::hw::device::{SystemInfo, Toggles};
 use crate::hw::power::{PowerMode, PowerState};
@@ -33,6 +34,11 @@ pub struct AppCtx {
     pub tun_edit: RwSignal<BTreeMap<String, i64>>,
     /// Черновик оборотов: номер вентилятора → об/мин (0 — авто).
     pub fan_edit: RwSignal<BTreeMap<u8, u32>>,
+    /// Действующий свой профиль, как он сохранён, и его черновик.
+    pub prof_orig: RwSignal<Option<Profile>>,
+    pub prof_edit: RwSignal<Option<Profile>>,
+    /// Закрытие окна прячет его в трей.
+    pub tray: RwSignal<bool>,
     /// Редактируемые слои активного профиля подсветки.
     pub rgb_edit: RwSignal<Vec<Effect>>,
     pub rgb_layer: RwSignal<Option<usize>>,
@@ -68,6 +74,9 @@ impl AppCtx {
             page: use_signal(0usize),
             tun_edit: use_signal(BTreeMap::new()),
             fan_edit: use_signal(BTreeMap::new()),
+            prof_orig: use_signal(None),
+            prof_edit: use_signal(None),
+            tray: use_signal(crate::settings::tray()),
             rgb_edit: use_signal(Vec::new()),
             rgb_layer: use_signal(None),
             rgb_sel: use_signal(Vec::new()),
@@ -81,10 +90,11 @@ impl AppCtx {
     /// Запускает фоновый поток и эффекты уровня приложения (после
     /// инициализации рантайма окна).
     pub fn start(&self) {
+        // Окно на Wayland пересоздаётся после трея — поток и эффекты один раз.
         if let Some(rx) = self.pending.lock().unwrap().take() {
             worker::spawn(self.sink, self.simulate, self.page_flag.clone(), rx);
+            self.install_effects();
         }
-        self.install_effects();
     }
 
     pub fn send(&self, job: Job) {
@@ -109,6 +119,17 @@ impl AppCtx {
                 c.send(Job::RgbLoad(st.profile));
             }
         });
+        // Действующий профиль (сменили, сохранили, переключили режим) — новый черновик.
+        let c = self.clone();
+        create_effect(move || {
+            let (_, saved) = c.sink.autoapply.get();
+            let mode = c.sink.power.get().mode;
+            let cur = mode.and_then(|m| saved.active_for(m)).cloned();
+            if cur != c.prof_orig.get_untracked() {
+                c.prof_edit.set(cur.clone());
+                c.prof_orig.set(cur);
+            }
+        });
         // Прочитанные слои становятся черновиком.
         let c = self.clone();
         create_effect(move || {
@@ -129,6 +150,13 @@ impl AppCtx {
         let mut v = self.rgb_edit.get_untracked();
         f(&mut v);
         self.rgb_edit.set(v);
+    }
+
+    pub fn edit_profile(&self, f: impl FnOnce(&mut Profile)) {
+        if let Some(mut p) = self.prof_edit.get_untracked() {
+            f(&mut p);
+            self.prof_edit.set(Some(p));
+        }
     }
 
     pub fn power_mode(&self) -> Option<PowerMode> {
@@ -205,8 +233,12 @@ fn pill(content: impl Widget + 'static) -> impl Widget {
 }
 
 fn mode_pill(ctx: &AppCtx) -> impl Widget {
+    let (_, saved) = ctx.sink.autoapply.get();
     let (tone, text) = match ctx.power_mode() {
-        Some(m) => (m.tone(), m.label()),
+        Some(m) => match saved.active_for(m) {
+            Some(p) => (m.tone(), p.name.clone()),
+            None => (m.tone(), m.label()),
+        },
         None => ("idle", t!("Режим неизвестен")),
     };
     pill(
@@ -266,7 +298,24 @@ fn nav(ctx: AppCtx) -> impl Widget {
         );
     }
     let info = ctx.sink.info;
+    let tray = ctx.tray;
     col.child(DecoratedBox::new().class("grow"))
+        .child(move || {
+            let on = tray.get();
+            DecoratedBox::new()
+                .child(
+                    Row::new()
+                        .gap(10.0)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .child(Icon::new(icons::TRAY).class("nav-icon"))
+                        .child(Text::new(t!("В трей при закрытии")).class("nav-text-small grow"))
+                        .child(Toggle::new().on(on).on_change(move |v| {
+                            crate::settings::set_tray(v);
+                            tray.set(v);
+                        })),
+                )
+                .class("nav-tray")
+        })
         .child(move || {
             let i = info.get();
             Column::new()

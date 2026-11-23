@@ -1,18 +1,31 @@
 [package]
-name = "linux_legion"
+name = "linux-legion"
 version = "0.1.4"
 edition = "2021"
 description = "Linux control center for Lenovo Legion laptops: power modes, fans, Spectrum RGB, battery"
 license = "MIT"
 repository = "https://github.com/VitaminDB/linux-legion"
 
+[package.metadata.syngui]
+name = "Legion Control"
+id = "io.github.vitamindb.linux-legion"
+bin = "linux-legion"
+icon = "assets/icon/linux-legion.svg"
+desktop = "packaging/linux-legion.desktop"
+icons_png = "assets/icon/linux-legion-{size}.png"
+docs = ["README.md", "LICENSE"]
+
+[package.metadata.syngui.linux]
+package = "linux-legion"
+arches = ["x86_64"]
+
 [[bin]]
-name = "linux_legion"
+name = "linux-legion"
 path = "src/main.rs"
 
 [dependencies]
 syngui = { git = "https://github.com/VitaminDB/syngui.git", branch = "master", default-features = false, features = [
-    "winit", "msdf", "effects", "material-icons", "image", "i18n",
+    "winit", "msdf", "effects", "material-icons", "image", "i18n", "tray",
 ] }
 libc = "0.2"
 
@@ -21,7 +34,7 @@ opt-level = 1
 
 [dev-dependencies]
 syngui = { git = "https://github.com/VitaminDB/syngui.git", branch = "master", default-features = false, features = [
-    "winit", "msdf", "effects", "material-icons", "image", "i18n", "testing",
+    "winit", "msdf", "effects", "material-icons", "image", "i18n", "tray", "testing",
 ] }
 
 # Быстрая release-сборка для локальной работы: без LTO, параллельная

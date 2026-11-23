@@ -1,14 +1,16 @@
 //! Производительность: режимы питания, лимиты мощности и вентиляторы режима «Свой».
 
 use super::home::mode_icon;
-use crate::autoapply::Flag;
+use crate::autoapply::{Flag, Profile};
 use crate::hw::power::{PowerMode, Tunable};
+use crate::hw::rapl::Limits;
+use crate::hw::sensors::Gpu;
 use crate::ui::app::AppCtx;
 use crate::ui::icons;
 use crate::ui::widgets::{
-    access_banner, bar, card, card_with, kv, labeled, page_header, reactive, reactive_box, setting_row,
+    access_banner, bar, card_with, kv, labeled, page_header, reactive, reactive_box, setting_row,
 };
-use crate::worker::Job;
+use crate::worker::{CloneFrom, Job};
 use syngui::prelude::*;
 use syngui::widgets::*;
 use syngui::CursorIcon;
@@ -30,49 +32,330 @@ pub fn view(ctx: AppCtx) -> impl Widget {
                 crate::ui::widgets::nothing()
             }
         }))
-        .child(card(t!("Режим питания"), "", modes(ctx.clone())))
+        .child(modes_card(ctx.clone()))
+        .child(profile_editor(ctx.clone()))
         .child(custom_notice(ctx.clone()))
-        .child(tunables(ctx.clone()))
+        .child(
+            Row::new()
+                .gap(18.0)
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .child(tunables(ctx.clone(), Group::Cpu).class("grow").class("half"))
+                .child(tunables(ctx.clone(), Group::Gpu).class("grow").class("half")),
+        )
         .child(cpu(ctx.clone()))
         .child(fans(ctx.clone()))
         .child(autoapply(ctx))
         .class("page")
 }
 
-fn modes(ctx: AppCtx) -> impl Widget {
-    reactive(move || {
-        let st = ctx.sink.power.get();
-        let modes = if st.choices.is_empty() { PowerMode::ALL.to_vec() } else { st.choices.clone() };
-        let mut row = Row::new().gap(12.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
-        for m in modes {
+/// Плитка режима или профиля.
+fn tile(icon: &'static str, tone: &str, on: bool, label: String, hint: String, click: impl Fn() + Send + Sync + 'static) -> impl Widget {
+    let cls = if on { format!("mode-tile mode-tile-on tile-{tone}") } else { "mode-tile".to_string() };
+    GestureDetector::new()
+        .on_click(click)
+        .cursor(CursorIcon::Pointer)
+        .child(
+            DecoratedBox::new()
+                .child(
+                    Column::new()
+                        .gap(10.0)
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .child(
+                            DecoratedBox::new()
+                                .child(Center::new().child(Icon::new(icon).class("mode-icon")))
+                                .class(&format!("mode-icon-badge badge-{tone}")),
+                        )
+                        .child(Text::new(label).class("mode-label"))
+                        .child(Text::new(hint).class("mode-hint")),
+                )
+                .class(&cls),
+        )
+        .class("grow")
+}
+
+/// Кратко, что в профиле: «Экстрим · CPU ≤ 90 °C · 160/205 Вт».
+fn profile_summary(p: &Profile) -> String {
+    let mut parts = vec![p.base.label()];
+    if let Some(t) = p.cpu_temp {
+        parts.push(t!("CPU ≤ {t} °C", t = t));
+    }
+    if let Some(l) = p.rapl {
+        parts.push(t!("{pl1} / {pl2} Вт", pl1 = l.pl1, pl2 = l.pl2));
+    }
+    if p.base == PowerMode::Custom && !p.tunables.is_empty() {
+        parts.push(t!("свои лимиты прошивки"));
+    }
+    parts.join(" · ")
+}
+
+/// Встроенные режимы прошивки и свои профили; «Клонировать» — копия того, что включено.
+fn modes_card(ctx: AppCtx) -> impl Widget {
+    let c = ctx.clone();
+    let actions = move || {
+        let (_, saved) = c.sink.autoapply.get();
+        let mode = c.power_mode();
+        let from = match mode {
+            Some(m) => match saved.active_for(m) {
+                Some(p) => Some(CloneFrom::Profile(p.id)),
+                None => Some(CloneFrom::Mode(m)),
+            },
+            None => None,
+        };
+        let cc = c.clone();
+        Button::new(t!("Клонировать"))
+            .icon(icons::COPY)
+            .disabled(from.is_none())
+            .on_click(move || {
+                if let Some(f) = from {
+                    cc.send(Job::CloneProfile(f));
+                }
+            })
+            .class("btn-ghost")
+    };
+    card_with(
+        icons::SPEED,
+        t!("Режим питания"),
+        actions,
+        reactive(move || {
+            let st = ctx.sink.power.get();
+            let (_, saved) = ctx.sink.autoapply.get();
+            let profile_on = st.mode.and_then(|m| saved.active_for(m)).map(|p| p.id);
+            let modes = if st.choices.is_empty() { PowerMode::ALL.to_vec() } else { st.choices.clone() };
+            let mut row = Row::new().gap(12.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+            for m in modes {
+                let c = ctx.clone();
+                let on = st.mode == Some(m) && profile_on.is_none();
+                row = row.child(tile(mode_icon(m), m.tone(), on, m.label(), m.hint(), move || c.send(Job::SetPowerMode(m))));
+            }
+            let mut col = Column::new().gap(14.0).cross_axis_alignment(CrossAxisAlignment::Stretch).child(row);
+            col = col.child(Text::new(t!("Свои профили")).class("field-label"));
+            if saved.profiles.is_empty() {
+                col = col.child(
+                    Text::new(t!(
+                        "Пока нет. «Клонировать» создаёт профиль из включённого режима: например, «Экстрим» \
+                         (полная мощность видеокарты) с пределом температуры процессора."
+                    ))
+                    .class("muted"),
+                );
+            } else {
+                // По 5 в ряд, как встроенные режимы.
+                for chunk in saved.profiles.chunks(5) {
+                    let mut r = Row::new().gap(12.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+                    for p in chunk {
+                        let c = ctx.clone();
+                        let id = p.id;
+                        let on = profile_on == Some(id);
+                        r = r.child(tile(mode_icon(p.base), p.base.tone(), on, p.name.clone(), profile_summary(p), move || {
+                            c.send(Job::ActivateProfile(id))
+                        }));
+                    }
+                    for _ in chunk.len()..5 {
+                        r = r.child(DecoratedBox::new().class("grow"));
+                    }
+                    col = col.child(r);
+                }
+            }
+            col
+        }),
+    )
+}
+
+/// Редактор действующего своего профиля.
+fn profile_editor(ctx: AppCtx) -> impl Widget {
+    reactive_box(move || {
+        // Пересобирается, только когда сменился сохранённый профиль, — поле
+        // имени не теряет фокус при вводе.
+        let Some(orig) = ctx.prof_orig.get() else { return crate::ui::widgets::nothing() };
+        let id = orig.id;
+        let (c_save, c_del, c_name) = (ctx.clone(), ctx.clone(), ctx.clone());
+        let actions = move || {
+            let dirty = c_save.prof_edit.get().as_ref() != c_save.prof_orig.get().as_ref();
+            let (cs, cd) = (c_save.clone(), c_del.clone());
+            Row::new()
+                .gap(8.0)
+                .child(
+                    Button::new(t!("Удалить"))
+                        .icon(icons::DELETE)
+                        .on_click(move || cd.send(Job::DeleteProfile(id)))
+                        .class("btn-ghost"),
+                )
+                .child(
+                    Button::new(t!("Сохранить"))
+                        .icon(icons::CHECK)
+                        .disabled(!dirty)
+                        .on_click(move || {
+                            if let Some(mut p) = cs.prof_edit.get_untracked() {
+                                if p.name.trim().is_empty() {
+                                    p.name = p.base.label();
+                                }
+                                p.name = p.name.trim().to_string();
+                                cs.send(Job::SaveProfile(p));
+                            }
+                        })
+                        .class("btn-primary"),
+                )
+        };
+        let base_dd = {
             let c = ctx.clone();
-            let on = st.mode == Some(m);
-            let cls = if on { format!("mode-tile mode-tile-on tile-{}", m.tone()) } else { "mode-tile".to_string() };
-            row = row.child(
-                GestureDetector::new()
-                    .on_click(move || c.send(Job::SetPowerMode(m)))
-                    .cursor(CursorIcon::Pointer)
+            let st = ctx.sink.power.get_untracked();
+            let modes = if st.choices.is_empty() { PowerMode::ALL.to_vec() } else { st.choices.clone() };
+            let mut dd = Dropdown::new().width(240.0).leading_icon(mode_icon(orig.base));
+            for m in modes {
+                dd = dd.item(DropdownItem::new(m.key(), m.label()));
+            }
+            dd.selected(orig.base.key()).on_change(move |k: &str| {
+                if let Some(m) = PowerMode::from_key(k) {
+                    c.edit_profile(|p| p.base = m);
+                }
+            })
+        };
+        let body = Column::new()
+            .gap(18.0)
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .child(
+                Row::new()
+                    .gap(16.0)
+                    .cross_axis_alignment(CrossAxisAlignment::End)
                     .child(
-                        DecoratedBox::new()
+                        Column::new()
+                            .gap(6.0)
+                            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                            .child(Text::new(t!("Название")).class("field-label"))
                             .child(
-                                Column::new()
-                                    .gap(10.0)
-                                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                                    .child(
-                                        DecoratedBox::new()
-                                            .child(Center::new().child(Icon::new(mode_icon(m)).class("mode-icon")))
-                                            .class(&format!("mode-icon-badge badge-{}", m.tone())),
-                                    )
-                                    .child(Text::new(m.label()).class("mode-label"))
-                                    .child(Text::new(m.hint()).class("mode-hint")),
+                                TextField::new()
+                                    .text(orig.name.clone())
+                                    .placeholder(t!("Название профиля"))
+                                    .on_change(move |t| c_name.edit_profile(|p| p.name = t.to_string()))
+                                    .class("field"),
                             )
-                            .class(&cls),
+                            .class("grow"),
                     )
-                    .class("grow"),
+                    .child(
+                        Column::new()
+                            .gap(6.0)
+                            .child(Text::new(t!("Режим прошивки")).class("field-label"))
+                            .child(base_dd),
+                    ),
+            )
+            .child(profile_limits(ctx.clone()));
+        Box::new(card_with(icons::EDIT, t!("Профиль «{name}»", name = orig.name), actions, body))
+    })
+}
+
+/// PL1/PL2 и предел температуры CPU профиля.
+fn profile_limits(ctx: AppCtx) -> impl Widget {
+    reactive_box(move || {
+        let Some(p) = ctx.prof_edit.get() else { return crate::ui::widgets::nothing() };
+        let cpu = ctx.sink.cpu.get();
+        let (_, saved) = ctx.sink.autoapply.get();
+        let tunables = ctx.sink.tunables.get_untracked();
+        let range = |name: &str, lo: u32, hi: u32| {
+            tunables.iter().find(|t| t.name == name && t.adjustable()).map_or((lo, hi), |t| (t.min as u32, t.max as u32))
+        };
+        let factory = saved.limits_for(p.base);
+        let mut col = Column::new().gap(18.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+        // PL1/PL2
+        let c = ctx.clone();
+        let fdesc = match factory {
+            Some(l) => t!("Выключено — заводские для режима: {pl1} / {pl2} Вт.", pl1 = l.pl1, pl2 = l.pl2),
+            None => t!("Выключено — лимиты прошивки режима «Свой»."),
+        };
+        col = col.child(setting_row(
+            t!("Свои PL1 / PL2"),
+            if saved.rapl { fdesc } else { t!("Служба не ведёт лимиты CPU (выключено в «Процессор по режимам»).") },
+            Box::new(Toggle::new().on(p.rapl.is_some()).on_change(move |on| {
+                c.edit_profile(|p| p.rapl = if on { factory.or(Some(Limits { pl1: 90, pl2: 125 })) } else { None })
+            })),
+        ));
+        if let Some(l) = p.rapl {
+            let (lo1, hi1) = range("ppt_pl1_spl", 30, 200);
+            let (lo2, hi2) = range("ppt_pl2_sppt", 30, 250);
+            let (c1, c2) = (ctx.clone(), ctx.clone());
+            col = col
+                .child(slider_row(t!("CPU: длительная мощность (PL1)"), l.pl1, t!("Вт"), lo1, hi1, move |v| {
+                    c1.edit_profile(|p| {
+                        if let Some(r) = p.rapl.as_mut() {
+                            r.pl1 = v;
+                            r.pl2 = r.pl2.max(v);
+                        }
+                    })
+                }))
+                .child(slider_row(t!("CPU: кратковременная мощность (PL2)"), l.pl2, t!("Вт"), lo2, hi2, move |v| {
+                    c2.edit_profile(|p| {
+                        if let Some(r) = p.rapl.as_mut() {
+                            r.pl2 = v;
+                            r.pl1 = r.pl1.min(v);
+                        }
+                    })
+                }));
+        }
+
+        // Предел температуры (TCC)
+        match cpu.tcc {
+            Some(tcc) => {
+                let (lo, hi) = tcc.range();
+                let c = ctx.clone();
+                let desc = if !tcc.writable {
+                    t!("Нет прав на запись TCC Offset — обновите udev-правило пакета (группа wheel).")
+                } else {
+                    t!("Процессор сбрасывает частоту при этой температуре в любом режиме (Intel TCC). \
+                     Служба держит предел, пока профиль действует. Сейчас: {now} °C.", now = tcc.limit())
+                };
+                let start = tcc.limit().clamp(lo, hi).min(95);
+                col = col.child(setting_row(
+                    t!("Предел температуры CPU"),
+                    desc,
+                    Box::new(
+                        Toggle::new()
+                            .on(p.cpu_temp.is_some())
+                            .on_change(move |on| c.edit_profile(|p| p.cpu_temp = on.then_some(start))),
+                    ),
+                ));
+                if let Some(t) = p.cpu_temp {
+                    let c = ctx.clone();
+                    col = col.child(slider_row(t!("CPU: температурный предел"), t, "°C".into(), lo, hi, move |v| {
+                        c.edit_profile(|p| p.cpu_temp = Some(v))
+                    }));
+                }
+            }
+            None => {
+                col = col.child(
+                    Text::new(t!("Предел температуры CPU недоступен: нет intel_tcc_cooling (TCC Offset).")).class("muted"),
+                );
+            }
+        }
+        if p.base == PowerMode::Custom {
+            col = col.child(
+                Text::new(t!(
+                    "Основа — «Свой»: лимиты прошивки и обороты вентиляторов ниже («Применить») сохраняются в этот профиль."
+                ))
+                .class("row-desc"),
             );
         }
-        row
+        Box::new(col)
     })
+}
+
+/// Подпись, значение и ползунок с краями шкалы.
+fn slider_row(label: String, v: u32, unit: String, lo: u32, hi: u32, set: impl Fn(u32) + Send + Sync + 'static) -> impl Widget {
+    Column::new()
+        .gap(8.0)
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .child(labeled(label, format!("{v} {unit}")))
+        .child(
+            Slider::new()
+                .value(v as f32)
+                .range(lo as f32, hi as f32)
+                .step(1.0)
+                .on_change(move |x| set(x.round() as u32))
+                .class("wide-slider"),
+        )
+        .child(
+            Row::new()
+                .child(DecoratedBox::new().class("grow"))
+                .child(Text::new(format!("{lo}–{hi} {unit}")).class("scale-label")),
+        )
 }
 
 /// Подсказка: лимиты и вентиляторы меняются только в режиме «Свой».
@@ -109,40 +392,59 @@ fn custom_notice(ctx: AppCtx) -> impl Widget {
     })
 }
 
-fn tunables(ctx: AppCtx) -> impl Widget {
+/// Карточка лимитов: процессор или видеокарта.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Group {
+    Cpu,
+    Gpu,
+}
+
+impl Group {
+    fn of(name: &str) -> Group {
+        if name.starts_with("gpu_") {
+            Group::Gpu
+        } else {
+            Group::Cpu
+        }
+    }
+
+    /// Атрибуты группы, которые прошивка разрешает менять (диапазон не 0–0).
+    fn list(self, all: Vec<Tunable>) -> Vec<Tunable> {
+        all.into_iter().filter(|t| t.adjustable() && Group::of(&t.name) == self).collect()
+    }
+}
+
+fn tunables(ctx: AppCtx, group: Group) -> syngui::StyledWidget<DecoratedBox> {
     let (c_apply, c_reset) = (ctx.clone(), ctx.clone());
     let actions = move || {
         let custom = c_apply.power_mode() == Some(PowerMode::Custom);
-        let dirty = !c_apply.tun_edit.get().is_empty();
+        let names: Vec<String> = group.list(c_apply.sink.tunables.get()).into_iter().map(|t| t.name).collect();
+        let dirty = c_apply.tun_edit.get().keys().any(|k| names.contains(k));
         let (ca, cr, cm) = (c_apply.clone(), c_reset.clone(), c_reset.clone());
+        let pick = move |c: &AppCtx, f: fn(&Tunable) -> Option<i64>| {
+            let mut m = c.tun_edit.get_untracked();
+            for t in group.list(c.sink.tunables.get_untracked()) {
+                if let Some(v) = f(&t) {
+                    m.insert(t.name, v);
+                }
+            }
+            c.tun_edit.set(m);
+        };
         Row::new()
             .gap(8.0)
+            .child(DecoratedBox::new().class("grow"))
             .child(
                 Button::new(t!("Максимум"))
                     .icon(icons::BOLT)
-                    .disabled(!custom)
-                    .on_click(move || {
-                        // Атрибуты с пустым диапазоном (0–0) не трогать: у них max = 0.
-                        let map = cm.sink.tunables.get_untracked().into_iter().filter(Tunable::adjustable).map(|t| (t.name, t.max)).collect();
-                        cm.tun_edit.set(map);
-                    })
+                    .disabled(!custom || names.is_empty())
+                    .on_click(move || pick(&cm, |t| Some(t.max)))
                     .class("btn-ghost"),
             )
             .child(
                 Button::new(t!("По умолчанию"))
                     .icon(icons::RESTART)
-                    .disabled(!custom)
-                    .on_click(move || {
-                        let map = cr
-                            .sink
-                            .tunables
-                            .get_untracked()
-                            .into_iter()
-                            .filter(Tunable::adjustable)
-                            .filter_map(|t| t.default.map(|d| (t.name, d)))
-                            .collect();
-                        cr.tun_edit.set(map);
-                    })
+                    .disabled(!custom || names.is_empty())
+                    .on_click(move || pick(&cr, |t| t.default))
                     .class("btn-ghost"),
             )
             .child(
@@ -150,29 +452,39 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                     .icon(icons::CHECK)
                     .disabled(!custom || !dirty)
                     .on_click(move || {
-                        for (name, v) in ca.tun_edit.get_untracked() {
+                        let mut m = ca.tun_edit.get_untracked();
+                        let mine: Vec<(String, i64)> = m.iter().filter(|(k, _)| Group::of(k) == group).map(|(k, v)| (k.clone(), *v)).collect();
+                        for (name, v) in mine {
+                            m.remove(&name);
                             ca.send(Job::SetTunable(name, v));
                         }
-                        ca.tun_edit.set(Default::default());
+                        ca.tun_edit.set(m);
                     })
                     .class("btn-primary"),
             )
     };
-    card_with(
-        icons::BOLT,
-        t!("Лимиты мощности"),
-        actions,
-        reactive_box(move || {
-            // Прошивка отдаёт часть атрибутов с диапазоном 0–0 (в этом режиме не меняются) — скрыть.
-            let list: Vec<Tunable> = ctx.sink.tunables.get().into_iter().filter(Tunable::adjustable).collect();
-            if list.is_empty() {
-                return Box::new(
-                    Text::new(t!("Драйвер lenovo-wmi-other не отдаёт настраиваемых лимитов на этой модели.")).class("muted"),
-                );
-            }
+    let (icon, title) = match group {
+        Group::Cpu => (icons::MEMORY, t!("Процессор: лимиты прошивки")),
+        Group::Gpu => (icons::GPU, t!("Видеокарта: лимиты прошивки")),
+    };
+    // Кнопки — внизу: в половинной карточке заголовок узкий.
+    let body = reactive_box(move || {
+            let all = ctx.sink.tunables.get();
+            let list = group.list(all.clone());
             let custom = ctx.power_mode() == Some(PowerMode::Custom);
             let edit = ctx.tun_edit.get();
             let mut col = Column::new().gap(22.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+            if group == Group::Gpu {
+                col = col.child(gpu_info(&ctx, &all));
+            }
+            if list.is_empty() {
+                let text = if all.is_empty() {
+                    t!("Драйвер lenovo-wmi-other не отдаёт настраиваемых лимитов на этой модели.")
+                } else {
+                    t!("Прошивка не разрешает менять эти лимиты.")
+                };
+                return Box::new(col.child(Text::new(text).class("muted")));
+            }
             for t in list {
                 let v = edit.get(&t.name).copied().unwrap_or(t.value);
                 let changed = v != t.value;
@@ -207,8 +519,46 @@ fn tunables(ctx: AppCtx) -> impl Widget {
                 );
             }
             Box::new(col)
-        }),
+        });
+    card_with(
+        icon,
+        title,
+        || Text::new("").class("card-hint"),
+        Column::new()
+            .gap(22.0)
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .child(body)
+            .child(DecoratedBox::new().class("grow"))
+            .child(actions),
     )
+}
+
+/// Мощность видеокарты сейчас и почему в «Свой» её не поднять.
+fn gpu_info(ctx: &AppCtx, all: &[Tunable]) -> impl Widget {
+    let mut col = Column::new().gap(2.0).cross_axis_alignment(CrossAxisAlignment::Stretch);
+    match ctx.sink.sensors.get().gpu {
+        Gpu::Active(g) => {
+            let w = |v: Option<f32>| v.map_or("—".to_string(), |v| t!("{v} Вт", v = format!("{v:.0}")));
+            col = col.child(kv(t!("Предел мощности сейчас"), format!("{} / {}", w(g.power_limit_w), w(g.power_max_w))));
+            col = col.child(kv(t!("Потребление"), w(g.power_w)));
+        }
+        Gpu::Sleeping => col = col.child(kv(t!("Предел мощности сейчас"), t!("видеокарта спит"))),
+        Gpu::Absent => {}
+    }
+    let fixed = |n: &str| all.iter().find(|t| t.name == n && !t.adjustable()).map(|t| t.value);
+    if let (Some(ctgp), Some(ppab)) = (fixed("gpu_nv_ctgp"), fixed("gpu_nv_ppab")) {
+        col = col.child(kv(t!("TGP в «Свой» (прошивка)"), t!("{ctgp} + {ppab} Вт Dynamic Boost", ctgp = ctgp, ppab = ppab)));
+        col = col.child(
+            Text::new(t!(
+                "Прошивка не даёт менять TGP в режиме «Свой» (диапазон 0–0), поэтому видеокарта там ограничена \
+                 {sum} Вт. Полная мощность — в «Производительности» и «Экстриме»: для «Экстрима» с пределом \
+                 температуры процессора клонируйте «Экстрим» и включите предел в профиле.",
+                sum = ctgp + ppab
+            ))
+            .class("row-desc"),
+        );
+    }
+    col
 }
 
 fn fans(ctx: AppCtx) -> impl Widget {

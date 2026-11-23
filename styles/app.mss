@@ -115,6 +115,16 @@ Icon { color: var(--text-2); icon-size: 20px; }
 .nav-text { color: var(--text-2); font-size: 15px; }
 .nav-text-on { color: #ffffff; font-weight: 600; }
 
+.nav-tray {
+    padding: 10px 10px;
+    margin: 0px 0px 8px 0px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+.nav-text-small { color: var(--text-2); font-size: 13px; }
+.half { min-width: 0px; }
+
 .nav-footer {
     background: var(--surface);
     border: 1px solid var(--border);

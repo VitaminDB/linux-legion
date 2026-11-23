@@ -28,10 +28,18 @@ pub fn install() -> PathBuf {
     for (name, cur, min, max, disp) in [
         ("ppt_pl1_spl", 90, 50, 165, "Set the CPU sustained power limit"),
         ("ppt_pl2_sppt", 125, 60, 210, "Set the CPU slow package power tracking limit"),
+        ("ppt_cpu_cl", 55, 30, 105, "Set the CPU cross loading power limit"),
+        ("cpu_temp", 99, 85, 105, "Set the CPU thermal load limit"),
+        ("gpu_temp", 87, 75, 87, "Set the GPU thermal load limit"),
+        ("gpu_nv_ac_offset", 135, 10, 135, "Set the Nvidia GPU AC total processing power baseline offset"),
+        // в «Свой» прошивка не даёт менять TGP: диапазон 0–0
+        ("gpu_nv_ctgp", 95, 0, 0, "Set the GPU configurable total graphics power"),
+        ("gpu_nv_ppab", 15, 0, 0, "Set the Nvidia GPU power performance aware boost limit"),
     ] {
         put(&root, &format!("{fa}/{name}/type"), "integer");
         put(&root, &format!("{fa}/{name}/current_value"), &cur.to_string());
-        put(&root, &format!("{fa}/{name}/default_value"), &cur.to_string());
+        let default = if name == "cpu_temp" { 103 } else { cur };
+        put(&root, &format!("{fa}/{name}/default_value"), &default.to_string());
         put(&root, &format!("{fa}/{name}/min_value"), &min.to_string());
         put(&root, &format!("{fa}/{name}/max_value"), &max.to_string());
         put(&root, &format!("{fa}/{name}/scalar_increment"), "1");
@@ -67,6 +75,11 @@ pub fn install() -> PathBuf {
     put(&root, &format!("{ct}/name"), "coretemp");
     put(&root, &format!("{ct}/temp1_label"), "Package id 0");
     put(&root, &format!("{ct}/temp1_input"), "52000");
+    put(&root, &format!("{ct}/temp1_crit"), "105000");
+    let tcc = "/sys/class/thermal/cooling_device25";
+    put(&root, &format!("{tcc}/type"), "TCC Offset");
+    put(&root, &format!("{tcc}/cur_state"), "2");
+    put(&root, &format!("{tcc}/max_state"), "63");
 
     let bat = "/sys/class/power_supply/BAT0";
     for (f, v) in [

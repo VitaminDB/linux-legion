@@ -16,6 +16,8 @@ SUBSYSTEM=="firmware-attributes", KERNEL=="lenovo-wmi-other-*", RUN+="/bin/sh -c
 SUBSYSTEM=="hwmon", ATTR{name}=="lenovo_wmi_other", RUN+="/bin/sh -c 'for f in /sys%p/fan*_target; do chgrp wheel $$f && chmod g+w $$f; done'"
 # Лимиты CPU в RAPL (MSR и MMIO) — служба держит их по режиму.
 SUBSYSTEM=="powercap", KERNEL=="intel-rapl*:0", RUN+="/bin/sh -c 'for f in /sys%p/constraint_*_power_limit_uw; do chgrp wheel $$f && chmod g+w $$f; done'"
+# Предел температуры CPU (Intel TCC offset) — профили держат его в любом режиме.
+SUBSYSTEM=="thermal", KERNEL=="cooling_device*", ATTR{type}=="TCC Offset", RUN+="/bin/sh -c 'chgrp wheel /sys%p/cur_state && chmod g+w /sys%p/cur_state'"
 # EPP (energy_performance_preference) — служба выставляет по режиму.
 SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", RUN+="/bin/sh -c 'f=/sys%p/cpufreq/energy_performance_preference; [ -e $$f ] && chgrp wheel $$f && chmod g+w $$f; true'"
 # Fn Lock, камера, USB-зарядка, режим сохранения батареи.

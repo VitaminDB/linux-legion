@@ -35,6 +35,10 @@ pub struct GpuStats {
     pub clock_mhz: Option<u32>,
     pub mem_used_mb: Option<u32>,
     pub mem_total_mb: Option<u32>,
+    /// Действующий предел мощности (Вт): прошивка меняет его по режиму.
+    pub power_limit_w: Option<f32>,
+    /// Наибольший предел карты (Вт).
+    pub power_max_w: Option<f32>,
 }
 
 /// Считает загрузку CPU между вызовами по /proc/stat.
@@ -147,7 +151,7 @@ fn gpu() -> Gpu {
     }
     let out = Command::new("nvidia-smi")
         .args([
-            "--query-gpu=temperature.gpu,utilization.gpu,power.draw,clocks.gr,memory.used,memory.total",
+            "--query-gpu=temperature.gpu,utilization.gpu,power.draw,clocks.gr,memory.used,memory.total,enforced.power.limit,power.max_limit",
             "--format=csv,noheader,nounits",
         ])
         .output();
@@ -165,6 +169,8 @@ fn parse_smi(s: &str) -> GpuStats {
         clock_mhz: num(3).map(|v| v as u32),
         mem_used_mb: num(4).map(|v| v as u32),
         mem_total_mb: num(5).map(|v| v as u32),
+        power_limit_w: num(6),
+        power_max_w: num(7),
     }
 }
 
@@ -174,7 +180,9 @@ mod tests {
 
     #[test]
     fn parses_nvidia_smi() {
-        let s = parse_smi("48, 0, 5.63, 180, 12, 24463\n");
+        let s = parse_smi("48, 0, 5.63, 180, 12, 24463, 95.00, 175.00\n");
+        assert_eq!(s.power_limit_w, Some(95.0));
+        assert_eq!(s.power_max_w, Some(175.0));
         assert_eq!(s.temp, Some(48.0));
         assert_eq!(s.power_w, Some(5.63));
         assert_eq!(s.clock_mhz, Some(180));

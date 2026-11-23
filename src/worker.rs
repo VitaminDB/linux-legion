@@ -2,7 +2,7 @@
 //! подсветки и выполняет команды UI. Результаты уходят в сигналы
 //! (`set()` потокобезопасен); читать сигналы отсюда нельзя.
 
-use crate::autoapply::{self, Flag, Saved, ServiceState};
+use crate::autoapply::{self, Flag, Profile, Saved, ServiceState};
 use crate::hw::battery::{self, Battery, ChargeType};
 use crate::hw::cpufreq::{self, Epp};
 use crate::hw::device::{self, SystemInfo, Toggle, Toggles};
@@ -11,6 +11,7 @@ use crate::hw::power::{self, PowerMode, PowerState, Tunable};
 use crate::hw::rapl::{self, Rapl};
 use crate::hw::sensors::{Gpu, Sampler, Sensors};
 use crate::hw::sysfs;
+use crate::hw::tcc::{self, Tcc};
 use crate::spectrum::device::{Error as KbError, KeyMatrix, Keyboard};
 use crate::spectrum::protocol::{Effect, Rgb};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -22,6 +23,7 @@ use syngui::prelude::*;
 /// Разделы, от которых зависит частота опроса.
 pub mod page {
     pub const HOME: u8 = 0;
+    pub const POWER: u8 = 1;
     pub const LIGHTING: u8 = 2;
 }
 
@@ -50,6 +52,20 @@ pub enum Job {
     SetAutoApply(bool),
     /// Переключатель службы (кривая вентиляторов, RAPL, EPP).
     SetFlag(Flag, bool),
+    /// Включить свой профиль (его режим и всё поверх).
+    ActivateProfile(u32),
+    /// Сохранить свой профиль (новый или изменённый).
+    SaveProfile(Profile),
+    DeleteProfile(u32),
+    /// Копия встроенного режима или своего профиля — новый профиль, сразу активный.
+    CloneProfile(CloneFrom),
+}
+
+/// Откуда клонировать профиль.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CloneFrom {
+    Mode(PowerMode),
+    Profile(u32),
 }
 
 /// Лимиты CPU (RAPL) и EPP — то, чем управляет служба по режиму.
@@ -57,6 +73,8 @@ pub enum Job {
 pub struct CpuState {
     pub rapl: Rapl,
     pub epp: Epp,
+    /// Предел температуры CPU (TCC offset).
+    pub tcc: Option<Tcc>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -161,7 +179,7 @@ impl Worker {
             let page = self.page.load(Ordering::Relaxed);
 
             if now >= next_sysfs {
-                let gpu = page == page::HOME && now >= next_gpu;
+                let gpu = (page == page::HOME || page == page::POWER) && now >= next_gpu;
                 let on_ac = battery::read_battery().is_none_or(|b| b.ac_online);
                 if gpu {
                     next_gpu = now + if on_ac { GPU_POLL_AC } else { GPU_POLL_BATTERY };
@@ -207,7 +225,7 @@ impl Worker {
         self.sink.power.set(power::read_state());
         self.sink.tunables.set(power::read_tunables());
         self.sink.fans.set(fans::read_fans());
-        self.sink.cpu.set(CpuState { rapl: rapl::read(), epp: cpufreq::read() });
+        self.sink.cpu.set(CpuState { rapl: rapl::read(), epp: cpufreq::read(), tcc: tcc::read() });
         self.sink.battery.set(battery::read_battery());
         self.sink.toggles.set(device::read_toggles());
     }
@@ -231,18 +249,69 @@ impl Worker {
     fn handle(&mut self, job: Job) {
         match job {
             Job::SetPowerMode(m) => {
-                let was = power::read_state().mode;
-                let r = power::set_mode(m);
-                if r.is_ok() {
-                    // EC Legion помнит ручные обороты и вне «Свой» — вернуть
-                    // авто, если вентиляторы не ведёт служба.
-                    if was == Some(PowerMode::Custom) && m != PowerMode::Custom && !autoapply::load().fan_curve {
-                        autoapply::release_fans();
-                    }
-                    // Лимиты CPU/EPP под режим — на случай, если служба не запущена.
-                    let _ = autoapply::apply_cpu(m);
-                }
+                // Встроенный режим снимает свой профиль.
+                let _ = autoapply::set_active(None);
+                let r = self.switch_mode(m);
+                self.refresh_autoapply();
                 self.sysfs_result(r, t!("Режим питания: {label}", label = m.label()));
+            }
+            Job::ActivateProfile(id) => {
+                let saved = autoapply::load();
+                let Some(p) = saved.profile(id).cloned() else { return };
+                let _ = autoapply::set_active(Some(id));
+                let r = self.switch_mode(p.base);
+                self.refresh_autoapply();
+                self.sysfs_result(r, t!("Профиль: {name}", name = p.name));
+            }
+            Job::SaveProfile(p) => {
+                let (id, name, base) = (p.id, p.name.clone(), p.base);
+                match autoapply::save_profile(p) {
+                    Ok(()) => {
+                        // Действующий профиль — применить сразу (режим мог смениться).
+                        if autoapply::load().active == Some(id) {
+                            let r = self.switch_mode(base);
+                            self.sysfs_result(r, t!("Профиль «{name}» сохранён", name = name));
+                        } else {
+                            self.notify(NoticeKind::Success, t!("Профиль «{name}» сохранён", name = name));
+                        }
+                    }
+                    Err(e) => self.notify(NoticeKind::Error, e.to_string()),
+                }
+                self.refresh_autoapply();
+            }
+            Job::DeleteProfile(id) => {
+                let saved = autoapply::load();
+                let name = saved.profile(id).map(|p| p.name.clone()).unwrap_or_default();
+                let was_active = saved.active == Some(id);
+                match autoapply::delete_profile(id) {
+                    Ok(()) => {
+                        if was_active {
+                            // Вернуть встроенные значения режима.
+                            if let Some(m) = power::read_state().mode {
+                                let _ = self.switch_mode(m);
+                            }
+                        }
+                        self.notify(NoticeKind::Success, t!("Профиль «{name}» удалён", name = name));
+                    }
+                    Err(e) => self.notify(NoticeKind::Error, e.to_string()),
+                }
+                self.refresh_autoapply();
+                self.refresh_sysfs();
+            }
+            Job::CloneProfile(from) => {
+                let p = self.clone_profile(from);
+                let (id, name) = (p.id, p.name.clone());
+                match autoapply::save_profile(p).and_then(|_| autoapply::set_active(Some(id))) {
+                    Ok(()) => {
+                        if let Some(m) = power::read_state().mode {
+                            let _ = self.switch_mode(m);
+                        }
+                        self.notify(NoticeKind::Success, t!("Создан профиль «{name}»", name = name));
+                    }
+                    Err(e) => self.notify(NoticeKind::Error, e.to_string()),
+                }
+                self.refresh_autoapply();
+                self.refresh_sysfs();
             }
             Job::SetTunable(name, v) => {
                 let label = self.label_of(&name);
@@ -319,6 +388,60 @@ impl Worker {
                 }
                 self.refresh_autoapply();
                 self.refresh_sysfs();
+            }
+        }
+    }
+
+    /// Включить режим и применить то, что в нём действует (профиль или
+    /// встроенное) — на случай, если служба не запущена.
+    fn switch_mode(&mut self, m: PowerMode) -> sysfs::Result<()> {
+        let was = power::read_state().mode;
+        let r = if was == Some(m) { Ok(()) } else { power::set_mode(m) };
+        if r.is_ok() {
+            // EC Legion помнит ручные обороты и вне «Свой» — вернуть
+            // авто, если вентиляторы не ведёт служба.
+            if was == Some(PowerMode::Custom) && m != PowerMode::Custom && !autoapply::load().fan_curve {
+                autoapply::release_fans();
+            }
+            if m == PowerMode::Custom {
+                if was != Some(m) {
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+                let _ = autoapply::apply_custom();
+            }
+            let _ = autoapply::apply_cpu(m);
+        }
+        r
+    }
+
+    /// Новый профиль — копия режима (его заводские PL1/PL2, а для «Свой» —
+    /// сохранённые лимиты и обороты) или своего профиля.
+    fn clone_profile(&self, from: CloneFrom) -> Profile {
+        let saved = autoapply::load();
+        let id = saved.next_id();
+        match from {
+            CloneFrom::Profile(src) if saved.profile(src).is_some() => {
+                let mut p = saved.profile(src).cloned().unwrap();
+                p.id = id;
+                p.name = t!("{name} — копия", name = p.name);
+                p
+            }
+            CloneFrom::Profile(_) => Profile::new(id, t!("Новый профиль"), PowerMode::Custom),
+            CloneFrom::Mode(m) => {
+                let mut p = Profile::new(id, t!("{name} — копия", name = m.label()), m);
+                // Заводские PL1/PL2 наследуются; свои rapl.<режим> из конфига — копируются.
+                p.rapl = saved.rapl_modes.get(m.key()).copied();
+                if m == PowerMode::Custom {
+                    // Текущие значения прошивки поверх сохранённых.
+                    let eff = saved.effective(PowerMode::Custom);
+                    p.tunables = power::read_tunables()
+                        .into_iter()
+                        .filter(|t| t.adjustable())
+                        .map(|t| (t.name.clone(), eff.tunables.get(&t.name).copied().unwrap_or(t.value)))
+                        .collect();
+                    p.fans = eff.fans;
+                }
+                p
             }
         }
     }

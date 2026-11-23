@@ -9,3 +9,4 @@ pub mod rapl;
 pub mod sensors;
 pub mod sim;
 pub mod sysfs;
+pub mod tcc;

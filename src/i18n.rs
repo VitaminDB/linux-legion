@@ -2,10 +2,7 @@
 //! i18n, ключ — сама строка); переводы — `i18n/<язык>.lang`, собираются
 //! `syngui/scripts/i18n-extract.py i18n/en.lang src` (и для остальных языков).
 //!
-//! Язык: `LEGION_LANG`, иначе выбранный в шапке (`~/.config/linux-legion/ui.conf`,
-//! `language=en`), иначе язык системы (`LANG`).
-
-use std::path::PathBuf;
+//! Язык: `LEGION_LANG`, иначе выбранный в шапке (`ui.conf`, `language=en`, см. `settings`), иначе язык системы (`LANG`).
 
 /// Язык исходных строк.
 pub const SOURCE: &str = "ru";
@@ -29,19 +26,9 @@ const CATALOGS: &[&str] = &[
 
 const ENV: &str = "LEGION_LANG";
 
-fn path() -> PathBuf {
-    crate::autoapply::dir().join("ui.conf")
-}
-
 /// Язык, выбранный в программе (пусто — как в системе).
 pub fn saved() -> String {
-    std::fs::read_to_string(path())
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|l| l.split_once('='))
-        .find(|(k, _)| k.trim() == "language")
-        .map(|(_, v)| v.trim().to_string())
-        .unwrap_or_default()
+    crate::settings::get("language").unwrap_or_default()
 }
 
 /// Язык задан переменной окружения — она главнее выбора в программе.
@@ -65,13 +52,7 @@ pub fn init() {
 /// Выбрать язык (пусто — как в системе): запомнить и сразу применить —
 /// подписанный на язык корень окна перестраивается.
 pub fn choose(tag: &str) {
-    let p = path();
-    if let Some(d) = p.parent() {
-        let _ = std::fs::create_dir_all(d);
-    }
-    if let Err(e) = std::fs::write(&p, format!("language={tag}\n")) {
-        eprintln!("linux-legion: {}: {e}", p.display());
-    }
+    crate::settings::set("language", tag);
     syngui::i18n::set_language(requested().as_str());
 }
 

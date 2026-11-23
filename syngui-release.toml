@@ -1,0 +1,32 @@
+# Выпуск linux-legion утилитой syngui:
+#   syngui package -w -f arch --fast --install   — собрать и поставить себе (pacman -U)
+#   syngui package -w -f aur                     — PKGBUILD + .SRCINFO для AUR (-git, -bin)
+name = "linux-legion"
+url = "https://github.com/VitaminDB/linux-legion"
+license = ["MIT"]
+makedepends = ["cargo", "git"]
+options = ["!lto", "!debug"]
+
+[packages.linux-legion]
+description = "Центр управления ноутбуками Lenovo Legion: режимы питания и свои профили, вентиляторы, подсветка Spectrum, батарея"
+description_en = "Control center for Lenovo Legion laptops: power modes and profiles, fans, Spectrum RGB lighting, battery (Vantage for Linux)"
+depends = ["fontconfig", "freetype2", "libxkbcommon", "wayland", "vulkan-icd-loader", "hicolor-icon-theme", "gcc-libs", "glibc", "gtk3", "libayatana-appindicator"]
+optdepends = ["libx11: сеанс X11", "libxcursor: курсоры в X11", "nvidia-utils: мониторинг видеокарты NVIDIA"]
+optdepends_en = ["libx11: X11 session", "libxcursor: cursors in X11", "nvidia-utils: NVIDIA GPU monitoring"]
+bins = ["linux-legion"]
+files = [
+    { from = "packaging/linux-legion.desktop", to = "usr/share/applications/linux-legion.desktop" },
+    { from = "packaging/70-linux-legion.rules", to = "usr/lib/udev/rules.d/70-linux-legion.rules" },
+    { from = "packaging/linux-legion-autoapply.service", to = "usr/lib/systemd/user/linux-legion-autoapply.service" },
+    { from = "assets/icon/linux-legion.svg", to = "usr/share/icons/hicolor/scalable/apps/linux-legion.svg" },
+    { from = "assets/icon/linux-legion-16.png", to = "usr/share/icons/hicolor/16x16/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-32.png", to = "usr/share/icons/hicolor/32x32/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-48.png", to = "usr/share/icons/hicolor/48x48/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-64.png", to = "usr/share/icons/hicolor/64x64/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-128.png", to = "usr/share/icons/hicolor/128x128/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-256.png", to = "usr/share/icons/hicolor/256x256/apps/linux-legion.png" },
+    { from = "assets/icon/linux-legion-512.png", to = "usr/share/icons/hicolor/512x512/apps/linux-legion.png" },
+    { from = "README.md", to = "usr/share/doc/linux-legion/README.md" },
+    { from = "LICENSE", to = "usr/share/licenses/linux-legion/LICENSE" },
+]
+install = "packaging/linux-legion.install"

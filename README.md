@@ -26,7 +26,7 @@ service keeps the CPU power limits and fans in line with the selected mode).
 | ![Performance](screenshots/performance.png) | ![Battery](screenshots/battery.png) | ![Device](screenshots/device.png) |
 
 The interface speaks 14 languages and follows the system language; switch it live from the header.
-Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux_legion --screenshot` (see [Usage](#usage)).
+Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux-legion --screenshot` (see [Usage](#usage)).
 
 ## What it does
 
@@ -42,6 +42,13 @@ Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux_legion --scree
   firmware limits you set) into both RAPL interfaces and keeps them there.
   **EPP per mode** (optional): `performance` in Performance/Extreme/Custom, `balance_performance`
   in Balanced, `balance_power` in Quiet — overrides tuned / power-profiles-daemon.
+  **Own profiles**: clone any mode or profile, give it a name and change what sits on top of the
+  firmware mode — CPU PL1/PL2, a **CPU temperature limit** (Intel TCC offset, works in every mode)
+  and, for Custom-based profiles, the firmware limits and fan targets. Example: *Extreme* keeps the
+  GPU at its full 175 W, while a profile cloned from it adds a 90 °C CPU limit. (In Custom the
+  firmware locks the GPU TGP — cTGP + Dynamic Boost, 110 W on the Pro 7 Gen 10 — so the GPU card
+  explains that instead of offering a slider that cannot work.)
+  The power limits are split into side-by-side **CPU** and **GPU** cards.
   **Software fan curve**: see [Fans](#fans) below.
   **Auto-apply**: the firmware forgets the Custom values after a reboot (fan targets also after
   sleep); the service restores them at login, whenever Custom mode is switched on (Fn+Q) and after
@@ -52,6 +59,8 @@ Screenshots are taken on a real Legion Pro 7 16IAX10H with `linux_legion --scree
   Profiles are stored in the keyboard itself.
 - **Battery** — charging mode (Standard / Rapid charge / Conservation ≈80 %), charge and health.
 - **Device** — Fn Lock, camera kill switch, always-on USB charging, system information.
+- **Tray** — the window can hide to the system tray on close (switch in the left panel);
+  `linux-legion --hidden` starts straight into the tray.
 - **14 languages** — English, Русский, Українська, Қазақша, Deutsch, Français, Español, Italiano,
   Português (Brasil), Polski, Türkçe, 简体中文, 日本語, 한국어. The language follows the system
   (`LANG`) and can be switched live from the window header; the choice is remembered.
@@ -63,7 +72,7 @@ RTX 5090 Laptop, Spectrum controller ITE `048d:c197`), Arch Linux, kernel 7.0.
 
 Other Legion models with the same kernel interfaces and a Spectrum controller (`048d:c1xx` /
 `048d:c9xx`, feature report `0x07` of 960 bytes) should work; every page adapts to what the
-firmware reports. `linux_legion --simulate` shows the whole UI without the hardware.
+firmware reports. `linux-legion --simulate` shows the whole UI without the hardware.
 
 ## Install
 
@@ -83,26 +92,33 @@ cd linux-legion
 cargo build --release
 sudo install -Dm644 packaging/70-linux-legion.rules /etc/udev/rules.d/70-linux-legion.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
-./target/release/linux_legion
+./target/release/linux-legion
+```
+
+Or build an Arch package with [syngui-cli](https://github.com/VitaminDB/syngui/tree/master/syngui-cli)
+(the package is described in `syngui-release.toml`):
+
+```bash
+syngui package -w -f arch --install    # makepkg + pacman -U
 ```
 
 The udev rule gives the logged-in user access to the RGB controller (`uaccess`) and makes the
-sysfs knobs (power mode, power limits, fan targets, RAPL, EPP, battery mode, Fn Lock…) writable
+sysfs knobs (power mode, power limits, fan targets, RAPL, EPP, CPU TCC offset, battery mode, Fn Lock…) writable
 for the `wheel` group.
 
 ## Usage
 
 ```bash
-linux_legion                 # control the laptop
-linux_legion --apply         # apply saved Custom-mode limits and fans once
-linux_legion --daemon        # the auto-apply service (linux-legion-autoapply.service)
-linux_legion --simulate      # demo mode with a simulated Legion Pro 7
-linux_legion --page 2        # open a page (0 home … 4 device)
-linux_legion --screenshot out.png  # render the window to a PNG without showing it
+linux-legion                 # control the laptop
+linux-legion --apply         # apply saved Custom-mode limits and fans once
+linux-legion --daemon        # the auto-apply service (linux-legion-autoapply.service)
+linux-legion --simulate      # demo mode with a simulated Legion Pro 7
+linux-legion --page 2        # open a page (0 home … 4 device)
+linux-legion --screenshot out.png  # render the window to a PNG without showing it
 #   --scale 1.33  --size 1360x1000  --scroll-to lighting-layers
 #   --frames 60 --interval 100 --screenshot 'f{n}.png'   # frame series (the GIF above)
-LEGION_LANG=de linux_legion  # interface language (overrides the choice in the header)
-LEGION_TRACE=1 linux_legion  # print every RGB packet to stderr
+LEGION_LANG=de linux-legion  # interface language (overrides the choice in the header)
+LEGION_TRACE=1 linux-legion  # print every RGB packet to stderr
 ```
 
 ## The service
@@ -120,7 +136,7 @@ cpu.epp=0                    # per-mode EPP (default off)
 rapl.performance=150/190     # your own PL1/PL2 for a mode (quiet, balanced, performance, extreme)
 ```
 
-`linux_legion --apply` applies everything once; `--daemon` is what the unit runs. The service
+`linux-legion --apply` applies everything once; `--daemon` is what the unit runs. The service
 re-checks the limits every 5 s (writes only when something differs), the fans every 2 s.
 
 ## Fans

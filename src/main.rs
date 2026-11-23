@@ -10,6 +10,7 @@
 //! `LEGION_LANG=en`             — язык интерфейса (главнее выбора в шапке);
 //! `linux_legion --apply`      — применить сохранённые значения режима «Свой»;
 //! `linux_legion --daemon`     — служба автоприменения (см. `autoapply`);
+//! `linux_legion --hidden`     — запуск в трей без окна;
 //! `LEGION_TRACE=1`            — печатать пакеты подсветки в stderr.
 
 #[macro_use]
@@ -18,6 +19,7 @@ extern crate syngui;
 mod autoapply;
 mod hw;
 mod i18n;
+mod settings;
 mod spectrum;
 mod ui;
 mod worker;
@@ -96,14 +98,27 @@ fn main() {
         return;
     }
 
+    // Трей есть всегда; закрытие окна прячет его туда, если включено в левой панели.
+    syngui::app::set_hide_on_close(settings::tray());
+    let tray = syngui::app::TrayConfig::new()
+        .icon_png(ICON.to_vec())
+        .tooltip("Legion Control")
+        .menu_show(t!("Показать окно"))
+        .menu_separator()
+        .menu_exit(t!("Выход"))
+        .close_action(syngui::app::TrayCloseAction::Exit);
+
     App::new()
         .title("Legion Control")
         .app_id("linux-legion")
         .with_window_icon_png(ICON)
+        .with_tray(tray)
+        .with_single_instance("linux-legion")
         .size(1360, 900)
         .min_size(1180, 720)
         .with_icon_font(material::FONT_DATA)
         .with_styles_str(STYLES)
+        .start_hidden(args.iter().any(|a| a == "--hidden"))
         .run(move |_| {
             ctx.start();
             // Смена языка (выбор в шапке) — перестроить всё окно.

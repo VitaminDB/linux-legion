@@ -35,6 +35,8 @@ pub const SEARCH: &str = "\u{e8b6}";
 pub const LAYERS: &str = "\u{e53b}";
 pub const EDIT: &str = "\u{e3c9}";
 pub const AUTO: &str = "\u{e65f}";
+pub const COPY: &str = "\u{e14d}"; // content_copy
+pub const TRAY: &str = "\u{e931}"; // minimize
 
 // режимы питания
 pub const MODE_QUIET: &str = "\u{f03d}"; // nightlight
