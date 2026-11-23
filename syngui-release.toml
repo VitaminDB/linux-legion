@@ -12,7 +12,7 @@ arches = ["x86_64"]
 [packages.linux-legion]
 description = "Центр управления ноутбуками Lenovo Legion: режимы питания и свои профили, вентиляторы, подсветка Spectrum, батарея"
 description_en = "Control center for Lenovo Legion laptops: power modes and profiles, fans, Spectrum RGB lighting, battery (Vantage for Linux)"
-depends = ["fontconfig", "freetype2", "libxkbcommon", "wayland", "vulkan-icd-loader", "hicolor-icon-theme", "gcc-libs", "glibc", "gtk3", "libayatana-appindicator"]
+depends = ["fontconfig", "freetype2", "libxkbcommon", "wayland", "vulkan-icd-loader", "hicolor-icon-theme", "gcc-libs", "glibc", "gtk3", "libayatana-appindicator", "xdotool"]
 optdepends = ["libx11: сеанс X11", "libxcursor: курсоры в X11", "nvidia-utils: мониторинг видеокарты NVIDIA"]
 optdepends_en = ["libx11: X11 session", "libxcursor: cursors in X11", "nvidia-utils: NVIDIA GPU monitoring"]
 bins = ["linux-legion"]
