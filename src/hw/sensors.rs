@@ -1,7 +1,10 @@
-//! Мониторинг: температура, загрузка и частота CPU, память, видеокарта NVIDIA.
+//! Мониторинг: температура, загрузка и частота CPU, память, видеокарта.
 //!
-//! Видеокарту опрашивает `nvidia-smi`, но только когда она уже проснулась:
-//! опрос спящей дискретной карты будит её и сажает батарею.
+//! Видеокарту NVIDIA опрашивает `nvidia-smi`, AMD — файлы драйвера amdgpu в
+//! sysfs; обе только когда карта уже проснулась: опрос спящей дискретной
+//! карты будит её и сажает батарею. Если NVIDIA нет (модели только со
+//! встроенной Radeon, например Legion 7 15ASH11 с Radeon 8060S), берётся
+//! видеокарта AMD.
 
 use super::sysfs;
 use std::path::PathBuf;
@@ -134,8 +137,24 @@ fn nvidia_pci() -> Option<PathBuf> {
     })
 }
 
+/// PCI-устройство видеокарты AMD на драйвере amdgpu (встроенной или
+/// дискретной). Класс 0x03xx: VGA (0x0300) или Display controller (0x0380),
+/// как у встроенной графики Strix Halo.
+fn amd_pci() -> Option<PathBuf> {
+    sysfs::find_dir("/sys/bus/pci/devices", |p| {
+        sysfs::read(&p.join("vendor")).as_deref() == Some("0x1002")
+            && sysfs::read(&p.join("class")).is_some_and(|c| c.starts_with("0x03"))
+            && std::fs::read_link(p.join("driver"))
+                .is_ok_and(|d| d.file_name().is_some_and(|n| n == "amdgpu"))
+    })
+}
+
 /// Название видеокарты — из /proc драйвера, не трогая саму карту.
 pub fn gpu_name() -> Option<String> {
+    nvidia_name().or_else(amd_name)
+}
+
+fn nvidia_name() -> Option<String> {
     let dir = std::fs::read_dir("/proc/driver/nvidia/gpus").ok()?.flatten().next()?.path();
     std::fs::read_to_string(dir.join("information"))
         .ok()?
@@ -144,19 +163,97 @@ pub fn gpu_name() -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+/// Название видеокарты AMD. У встроенной точная модель есть только в имени
+/// процессора («AMD RYZEN AI MAX+ 392 w/ Radeon 8060S»): в pci.ids одна запись
+/// на всё семейство («Strix Halo [Radeon Graphics / Radeon 8050S Graphics /
+/// Radeon 8060S Graphics]»). Иначе — запись pci.ids.
+fn amd_name() -> Option<String> {
+    let pci = amd_pci()?;
+    if let Some(name) = std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| radeon_from_cpu(&c)) {
+        return Some(name);
+    }
+    let device = sysfs::read(&pci.join("device"))?;
+    let ids = ["/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids"]
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())?;
+    pci_ids_name(&ids, "1002", device.trim_start_matches("0x"))
+}
+
+/// «… w/ Radeon 8060S» из строки model name → «Radeon 8060S».
+fn radeon_from_cpu(cpuinfo: &str) -> Option<String> {
+    let model = cpuinfo.lines().find_map(|l| l.strip_prefix("model name"))?;
+    let (_, gpu) = model.split_once(" w/ ")?;
+    let gpu = gpu.trim();
+    (!gpu.is_empty()).then(|| gpu.to_string())
+}
+
+/// Имя устройства из pci.ids; из «Семейство [Модель]» берётся модель.
+fn pci_ids_name(ids: &str, vendor: &str, device: &str) -> Option<String> {
+    let mut in_vendor = false;
+    for line in ids.lines() {
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        if !line.starts_with('\t') {
+            in_vendor = line.starts_with(vendor);
+            continue;
+        }
+        if in_vendor && !line.starts_with("\t\t") {
+            let rest = &line[1..];
+            if rest.len() > 4 && rest[..4].eq_ignore_ascii_case(device) {
+                let name = rest[4..].trim();
+                let name = match (name.find('['), name.rfind(']')) {
+                    (Some(a), Some(b)) if b > a + 1 => &name[a + 1..b],
+                    _ => name,
+                };
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn gpu() -> Gpu {
-    let Some(pci) = nvidia_pci() else { return Gpu::Absent };
+    if let Some(pci) = nvidia_pci() {
+        if sysfs::read(&pci.join("power/runtime_status")).as_deref() == Some("suspended") {
+            return Gpu::Sleeping;
+        }
+        let out = Command::new("nvidia-smi")
+            .args([
+                "--query-gpu=temperature.gpu,utilization.gpu,power.draw,clocks.gr,memory.used,memory.total,enforced.power.limit,power.max_limit",
+                "--format=csv,noheader,nounits",
+            ])
+            .output();
+        let Ok(out) = out else { return Gpu::Active(GpuStats::default()) };
+        return Gpu::Active(parse_smi(&String::from_utf8_lossy(&out.stdout)));
+    }
+    let Some(pci) = amd_pci() else { return Gpu::Absent };
     if sysfs::read(&pci.join("power/runtime_status")).as_deref() == Some("suspended") {
         return Gpu::Sleeping;
     }
-    let out = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=temperature.gpu,utilization.gpu,power.draw,clocks.gr,memory.used,memory.total,enforced.power.limit,power.max_limit",
-            "--format=csv,noheader,nounits",
-        ])
-        .output();
-    let Ok(out) = out else { return Gpu::Active(GpuStats::default()) };
-    Gpu::Active(parse_smi(&String::from_utf8_lossy(&out.stdout)))
+    Gpu::Active(amd_stats(&pci))
+}
+
+/// Показатели amdgpu из sysfs: hwmon (температура edge, мощность, частота
+/// sclk, предел мощности), загрузка и видеопамять — в каталоге устройства.
+/// У встроенной графики VRAM — выделенная из ОЗУ область, предела мощности нет.
+fn amd_stats(pci: &std::path::Path) -> GpuStats {
+    let hwmon = std::fs::read_dir(pci.join("hwmon"))
+        .ok()
+        .and_then(|rd| rd.flatten().map(|e| e.path()).find(|p| sysfs::read(&p.join("name")).as_deref() == Some("amdgpu")));
+    let h = |f: &str| hwmon.as_ref().and_then(|d| sysfs::read_num::<f64>(&d.join(f)));
+    let mb = |f: &str| sysfs::read_num::<u64>(&pci.join(f)).map(|b| (b / 1_048_576) as u32);
+    GpuStats {
+        temp: h("temp1_input").map(|v| (v / 1000.0) as f32),
+        load: sysfs::read_num::<f32>(&pci.join("gpu_busy_percent")),
+        // power1_average есть не на всех поколениях, power1_input — на новых.
+        power_w: h("power1_average").or_else(|| h("power1_input")).map(|v| (v / 1_000_000.0) as f32),
+        clock_mhz: h("freq1_input").map(|v| (v / 1_000_000.0) as u32),
+        mem_used_mb: mb("mem_info_vram_used"),
+        mem_total_mb: mb("mem_info_vram_total"),
+        power_limit_w: h("power1_cap").map(|v| (v / 1_000_000.0) as f32),
+        power_max_w: h("power1_cap_max").map(|v| (v / 1_000_000.0) as f32),
+    }
 }
 
 fn parse_smi(s: &str) -> GpuStats {
@@ -177,6 +274,39 @@ fn parse_smi(s: &str) -> GpuStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_amdgpu_sysfs() {
+        let dir = std::env::temp_dir().join(format!("linux-legion-amdgpu-{}", std::process::id()));
+        let hw = dir.join("hwmon/hwmon5");
+        std::fs::create_dir_all(&hw).unwrap();
+        for (f, v) in [("name", "amdgpu"), ("temp1_input", "45000"), ("power1_input", "16931000"), ("freq1_input", "898000000")] {
+            std::fs::write(hw.join(f), v).unwrap();
+        }
+        for (f, v) in [("gpu_busy_percent", "7"), ("mem_info_vram_used", "3359010816"), ("mem_info_vram_total", "8589934592")] {
+            std::fs::write(dir.join(f), v).unwrap();
+        }
+        let s = amd_stats(&dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(s.temp, Some(45.0));
+        assert_eq!(s.load, Some(7.0));
+        assert_eq!(s.power_w, Some(16.931));
+        assert_eq!(s.clock_mhz, Some(898));
+        assert_eq!(s.mem_used_mb, Some(3203));
+        assert_eq!(s.mem_total_mb, Some(8192));
+        assert_eq!(s.power_limit_w, None);
+    }
+
+    #[test]
+    fn names_amd_gpu() {
+        let cpu = "processor\t: 0\nmodel name\t: AMD RYZEN AI MAX+ 392 w/ Radeon 8060S\n";
+        assert_eq!(radeon_from_cpu(cpu).as_deref(), Some("Radeon 8060S"));
+        assert_eq!(radeon_from_cpu("model name\t: AMD Ryzen 7 5800X 8-Core Processor\n"), None);
+        let ids = "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n\t1586  Strix Halo [Radeon Graphics / Radeon 8050S Graphics / Radeon 8060S Graphics]\n\t\t17aa 3d3c  Something\n\t744c  Navi 31 [Radeon RX 7900 XT/7900 XTX]\n10de  NVIDIA Corporation\n\t1586  Not this one\n";
+        assert_eq!(pci_ids_name(ids, "1002", "744c").as_deref(), Some("Radeon RX 7900 XT/7900 XTX"));
+        assert_eq!(pci_ids_name(ids, "1002", "1586").as_deref(), Some("Radeon Graphics / Radeon 8050S Graphics / Radeon 8060S Graphics"));
+        assert_eq!(pci_ids_name(ids, "1002", "ffff"), None);
+    }
 
     #[test]
     fn parses_nvidia_smi() {
